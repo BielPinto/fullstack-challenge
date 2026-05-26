@@ -268,6 +268,8 @@ cd services/wallets
 bun test tests/e2e
 ```
 
+**Swagger UI** (serviços diretos): http://localhost:4002/api/docs (wallets), http://localhost:4001/api/docs (games).
+
 ---
 
 ## Game Service
@@ -327,6 +329,13 @@ Testes unitários (sem Docker):
 ```bash
 cd services/games
 bun run test:unit
+```
+
+Testes E2E (com Docker rodando):
+
+```bash
+cd services/games
+bun test tests/e2e
 ```
 
 ---

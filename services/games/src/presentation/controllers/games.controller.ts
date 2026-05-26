@@ -11,6 +11,18 @@ import {
   ServiceUnavailableException,
   UseGuards,
 } from "@nestjs/common";
+import {
+  ApiBearerAuth,
+  ApiConflictResponse,
+  ApiCreatedResponse,
+  ApiNotFoundResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiQuery,
+  ApiServiceUnavailableResponse,
+  ApiTags,
+  ApiUnauthorizedResponse,
+} from "@nestjs/swagger";
 import { CashOutBetUseCase } from "../../application/use-cases/cash-out-bet.use-case";
 import { GetCurrentRoundUseCase } from "../../application/use-cases/get-current-round.use-case";
 import { GetMyBetsUseCase } from "../../application/use-cases/get-my-bets.use-case";
@@ -32,18 +44,23 @@ import { JwtAuthGuard } from "../../infrastructure/auth/jwt-auth.guard";
 import type { JwtPayload } from "../../infrastructure/auth/jwt.strategy";
 import { CurrentUser } from "../decorators/current-user.decorator";
 import {
+  BetActionResponseDto,
+  MyBetsResponseDto,
+  PlaceBetRequestDto,
   toBetActionResponse,
   toMyBetItemDto,
-  type PlaceBetRequestDto,
 } from "../dtos/bet.dto";
-import type { HealthCheckResponseDto } from "../dtos/health-check-response.dto";
+import { HealthCheckResponseDto } from "../dtos/health-check-response.dto";
 import {
+  RoundHistoryResponseDto,
+  RoundViewDto,
   toRoundHistoryItemDto,
   toRoundViewDto,
-  type VerifyRoundResponseDto,
+  VerifyRoundResponseDto,
 } from "../dtos/round.dto";
 import { formatMultiplierMicro } from "../mappers/format";
 
+@ApiTags("games")
 @Controller()
 export class GamesController {
   constructor(
@@ -56,21 +73,29 @@ export class GamesController {
   ) {}
 
   @Get("health")
+  @ApiOperation({ summary: "Service health check" })
+  @ApiOkResponse({ type: HealthCheckResponseDto })
   check(): HealthCheckResponseDto {
     return { status: "ok", service: "games" };
   }
 
   @Get(["games/rounds/current", "rounds/current"])
-  async currentRound() {
+  @ApiOperation({ summary: "Current round snapshot (phase, multiplier, public bets)" })
+  @ApiOkResponse({ type: RoundViewDto })
+  async currentRound(): Promise<RoundViewDto> {
     const view = await this.getCurrentRound.execute();
     return toRoundViewDto(view);
   }
 
   @Get(["games/rounds/history", "rounds/history"])
+  @ApiOperation({ summary: "Settled rounds history" })
+  @ApiQuery({ name: "skip", required: false, type: Number })
+  @ApiQuery({ name: "take", required: false, type: Number })
+  @ApiOkResponse({ type: RoundHistoryResponseDto })
   async roundHistory(
     @Query("skip") skip?: string,
     @Query("take") take?: string,
-  ) {
+  ): Promise<RoundHistoryResponseDto> {
     const rounds = await this.getRoundHistory.execute(
       skip ? Number(skip) : 0,
       take ? Number(take) : 20,
@@ -79,6 +104,9 @@ export class GamesController {
   }
 
   @Get(["games/rounds/:roundId/verify", "rounds/:roundId/verify"])
+  @ApiOperation({ summary: "Provably fair verification data for a round" })
+  @ApiOkResponse({ type: VerifyRoundResponseDto })
+  @ApiNotFoundResponse({ description: "Round not found" })
   async verify(@Param("roundId") roundId: string): Promise<VerifyRoundResponseDto> {
     try {
       const result = await this.verifyRound.execute(roundId);
@@ -104,11 +132,17 @@ export class GamesController {
 
   @Get(["games/bets/me", "bets/me"])
   @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth("jwt")
+  @ApiOperation({ summary: "Authenticated player bet history" })
+  @ApiQuery({ name: "skip", required: false, type: Number })
+  @ApiQuery({ name: "take", required: false, type: Number })
+  @ApiOkResponse({ type: MyBetsResponseDto })
+  @ApiUnauthorizedResponse()
   async myBets(
     @CurrentUser() user: JwtPayload,
     @Query("skip") skip?: string,
     @Query("take") take?: string,
-  ) {
+  ): Promise<MyBetsResponseDto> {
     const bets = await this.getMyBets.execute(
       user.sub,
       skip ? Number(skip) : 0,
@@ -119,7 +153,16 @@ export class GamesController {
 
   @Post(["games/bet", "bet"])
   @UseGuards(JwtAuthGuard)
-  async bet(@CurrentUser() user: JwtPayload, @Body() body: PlaceBetRequestDto) {
+  @ApiBearerAuth("jwt")
+  @ApiOperation({ summary: "Place a bet on the current round (betting phase only)" })
+  @ApiCreatedResponse({ type: BetActionResponseDto })
+  @ApiConflictResponse({ description: "Insufficient balance, duplicate bet, or wrong phase" })
+  @ApiUnauthorizedResponse()
+  @ApiServiceUnavailableResponse({ description: "Wallet operation timeout" })
+  async bet(
+    @CurrentUser() user: JwtPayload,
+    @Body() body: PlaceBetRequestDto,
+  ): Promise<BetActionResponseDto> {
     let amountInCents: bigint;
     try {
       amountInCents = BigInt(body.amountInCents);
@@ -140,7 +183,13 @@ export class GamesController {
 
   @Post(["games/bet/cashout", "bet/cashout"])
   @UseGuards(JwtAuthGuard)
-  async cashout(@CurrentUser() user: JwtPayload) {
+  @ApiBearerAuth("jwt")
+  @ApiOperation({ summary: "Cash out active bet during running phase" })
+  @ApiCreatedResponse({ type: BetActionResponseDto })
+  @ApiConflictResponse({ description: "No active bet or round not running" })
+  @ApiNotFoundResponse({ description: "Bet not found" })
+  @ApiUnauthorizedResponse()
+  async cashout(@CurrentUser() user: JwtPayload): Promise<BetActionResponseDto> {
     try {
       const result = await this.cashOutBet.execute({ userId: user.sub });
       return toBetActionResponse(result.bet, {

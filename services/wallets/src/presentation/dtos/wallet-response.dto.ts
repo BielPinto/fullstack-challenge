@@ -1,10 +1,20 @@
+import { ApiProperty } from "@nestjs/swagger";
 import type { Wallet } from "../../domain/entities/wallet.entity";
 
 export class WalletResponseDto {
+  @ApiProperty()
   id!: string;
+
+  @ApiProperty()
   userId!: string;
+
+  @ApiProperty({ description: "Balance in centavos as string (no float)" })
   balanceInCents!: string;
+
+  @ApiProperty({ example: "1000.00" })
   balance!: string;
+
+  @ApiProperty({ example: "BRL" })
   currency!: string;
 
   static fromWallet(wallet: Wallet): WalletResponseDto {

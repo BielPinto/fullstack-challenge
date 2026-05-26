@@ -1,28 +1,61 @@
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import type { BetRecord, RoundRecord } from "../../application/ports/game.persistence";
 import { formatCents, formatMultiplierMicro } from "../mappers/format";
 
-export type BetViewDto = {
-  id: string;
-  userId: string;
-  amount: string;
-  status: string;
-  cashoutMultiplier: string | null;
-  payout: string | null;
-};
+export class BetViewDto {
+  @ApiProperty()
+  id!: string;
 
-export type RoundViewDto = {
-  id: string;
-  phase: string;
-  commitHash: string;
-  clientSeed: string;
-  nonce: string;
-  bettingEndsAt: string;
-  runningStartedAt: string | null;
-  settledAt: string | null;
-  crashMultiplier: string | null;
-  currentMultiplier: string | null;
-  bets: BetViewDto[];
-};
+  @ApiProperty()
+  userId!: string;
+
+  @ApiProperty()
+  amount!: string;
+
+  @ApiProperty()
+  status!: string;
+
+  @ApiProperty({ nullable: true })
+  cashoutMultiplier!: string | null;
+
+  @ApiProperty({ nullable: true })
+  payout!: string | null;
+}
+
+export class RoundViewDto {
+  @ApiProperty()
+  id!: string;
+
+  @ApiProperty({ enum: ["BETTING", "RUNNING", "SETTLED"] })
+  phase!: string;
+
+  @ApiProperty()
+  commitHash!: string;
+
+  @ApiProperty()
+  clientSeed!: string;
+
+  @ApiProperty()
+  nonce!: string;
+
+  @ApiProperty()
+  bettingEndsAt!: string;
+
+  @ApiProperty({ nullable: true })
+  runningStartedAt!: string | null;
+
+  @ApiProperty({ nullable: true })
+  settledAt!: string | null;
+
+  @ApiProperty({ nullable: true })
+  crashMultiplier!: string | null;
+
+  @ApiProperty({ nullable: true })
+  currentMultiplier!: string | null;
+
+  @ApiProperty({ type: [BetViewDto] })
+  bets!: BetViewDto[];
+}
 
 export function toBetViewDto(bet: BetRecord): BetViewDto {
   return {
@@ -62,11 +95,21 @@ export function toRoundViewDto(input: {
   };
 }
 
-export type RoundHistoryItemDto = {
-  id: string;
-  crashMultiplier: string;
-  settledAt: string;
-};
+export class RoundHistoryItemDto {
+  @ApiProperty()
+  id!: string;
+
+  @ApiProperty()
+  crashMultiplier!: string;
+
+  @ApiProperty()
+  settledAt!: string;
+}
+
+export class RoundHistoryResponseDto {
+  @ApiProperty({ type: [RoundHistoryItemDto] })
+  items!: RoundHistoryItemDto[];
+}
 
 export function toRoundHistoryItemDto(round: RoundRecord): RoundHistoryItemDto {
   if (!round.crashMultiplierMicro || !round.settledAt) {
@@ -79,13 +122,28 @@ export function toRoundHistoryItemDto(round: RoundRecord): RoundHistoryItemDto {
   };
 }
 
-export type VerifyRoundResponseDto = {
-  roundId: string;
-  commitHash: string;
-  serverSecret: string | null;
-  clientSeed: string;
-  nonce: string;
-  crashMultiplier: string | null;
-  runDurationMs: number | null;
-  verified: boolean;
-};
+export class VerifyRoundResponseDto {
+  @ApiProperty()
+  roundId!: string;
+
+  @ApiProperty()
+  commitHash!: string;
+
+  @ApiPropertyOptional({ nullable: true })
+  serverSecret!: string | null;
+
+  @ApiProperty()
+  clientSeed!: string;
+
+  @ApiProperty()
+  nonce!: string;
+
+  @ApiPropertyOptional({ nullable: true })
+  crashMultiplier!: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  runDurationMs!: number | null;
+
+  @ApiProperty()
+  verified!: boolean;
+}

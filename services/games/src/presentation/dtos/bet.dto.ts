@@ -1,18 +1,34 @@
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import type { BetRecord } from "../../application/ports/game.persistence";
 import { formatCents, formatMultiplierMicro } from "../mappers/format";
 
-export type PlaceBetRequestDto = {
-  amountInCents: string;
-};
+export class PlaceBetRequestDto {
+  @ApiProperty({
+    example: "1000",
+    description: "Bet stake in centavos (BRL). Min 100, max 100000.",
+  })
+  amountInCents!: string;
+}
 
-export type BetActionResponseDto = {
-  betId: string;
-  roundId: string;
-  status: string;
-  amount: string;
+export class BetActionResponseDto {
+  @ApiProperty()
+  betId!: string;
+
+  @ApiProperty()
+  roundId!: string;
+
+  @ApiProperty({ enum: ["DEBIT_PENDING", "ACTIVE", "CASHED_OUT", "LOST", "DEBIT_FAILED"] })
+  status!: string;
+
+  @ApiProperty({ example: "10.00", description: "Formatted BRL amount" })
+  amount!: string;
+
+  @ApiPropertyOptional({ example: "1.42" })
   cashoutMultiplier?: string;
+
+  @ApiPropertyOptional({ example: "14.20" })
   payout?: string;
-};
+}
 
 export function toBetActionResponse(bet: BetRecord, extras?: {
   cashoutMultiplier?: bigint;
@@ -36,15 +52,33 @@ export function toBetActionResponse(bet: BetRecord, extras?: {
   };
 }
 
-export type MyBetItemDto = {
-  id: string;
-  roundId: string;
-  amount: string;
-  status: string;
-  cashoutMultiplier: string | null;
-  payout: string | null;
-  createdAt: string;
-};
+export class MyBetItemDto {
+  @ApiProperty()
+  id!: string;
+
+  @ApiProperty()
+  roundId!: string;
+
+  @ApiProperty()
+  amount!: string;
+
+  @ApiProperty()
+  status!: string;
+
+  @ApiProperty({ nullable: true })
+  cashoutMultiplier!: string | null;
+
+  @ApiProperty({ nullable: true })
+  payout!: string | null;
+
+  @ApiProperty()
+  createdAt!: string;
+}
+
+export class MyBetsResponseDto {
+  @ApiProperty({ type: [MyBetItemDto] })
+  items!: MyBetItemDto[];
+}
 
 export function toMyBetItemDto(bet: BetRecord): MyBetItemDto {
   return {
