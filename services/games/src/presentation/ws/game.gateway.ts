@@ -1,29 +1,14 @@
-import { Logger } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { GAME_WS_EVENTS } from "@crash/contracts";
-import {
-  OnGatewayConnection,
-  OnGatewayInit,
-  WebSocketGateway,
-  WebSocketServer,
-} from "@nestjs/websockets";
 import type { Server, Socket } from "socket.io";
 import { GetCurrentRoundUseCase } from "../../application/use-cases/get-current-round.use-case";
 import { SocketGameEventsPublisher } from "../../infrastructure/realtime/socket-game-events.publisher";
 import { toWsRoundStatePayload } from "../../infrastructure/realtime/ws-payload.mapper";
 
-const wsCorsOrigin = process.env.WS_CORS_ORIGIN ?? "*";
-
-@WebSocketGateway({
-  cors: {
-    origin: wsCorsOrigin === "*" ? true : wsCorsOrigin.split(",").map((o) => o.trim()),
-  },
-  transports: ["websocket", "polling"],
-})
-export class GameGateway implements OnGatewayInit, OnGatewayConnection {
+@Injectable()
+export class GameGateway {
   private readonly logger = new Logger(GameGateway.name);
-
-  @WebSocketServer()
-  server!: Server;
+  private server: Server | null = null;
 
   constructor(
     private readonly events: SocketGameEventsPublisher,
@@ -31,6 +16,7 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection {
   ) {}
 
   afterInit(server: Server): void {
+    this.server = server;
     this.events.attachServer(server);
     this.logger.log("Game WebSocket gateway ready (server-push only)");
   }
@@ -50,5 +36,9 @@ export class GameGateway implements OnGatewayInit, OnGatewayConnection {
       this.logger.error("Failed to send initial round state", error);
       client.disconnect();
     }
+  }
+
+  getServer(): Server | null {
+    return this.server;
   }
 }

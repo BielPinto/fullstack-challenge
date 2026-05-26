@@ -5,7 +5,10 @@ import { ExpressAdapter } from "@nestjs/platform-express";
 import express from "express";
 import { AppModule } from "./app.module";
 import { setupSwagger } from "./common/swagger";
-import { NodeHttpIoAdapter } from "./infrastructure/realtime/node-http-io.adapter";
+import {
+  mountSocketIoOnExpress,
+  wireSocketIoGateway,
+} from "./infrastructure/realtime/bootstrap-socket-io";
 
 async function bootstrap(): Promise<void> {
   const expressApp = express();
@@ -13,9 +16,13 @@ async function bootstrap(): Promise<void> {
   const httpAdapter = new ExpressAdapter(expressApp);
   httpAdapter.setHttpServer(httpServer);
 
+  const { io } = mountSocketIoOnExpress(expressApp, httpServer);
+
   const app = await NestFactory.create(AppModule, httpAdapter);
-  app.useWebSocketAdapter(new NodeHttpIoAdapter(httpServer));
   setupSwagger(app, "Games");
+
+  await app.init();
+  wireSocketIoGateway(app, io);
 
   const port = Number(process.env.PORT ?? 4001);
   await app.listen(port, "0.0.0.0");

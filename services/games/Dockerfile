@@ -7,6 +7,8 @@ WORKDIR /app
 COPY package.json ./
 COPY packages/@crash/contracts ./packages/@crash/contracts/
 COPY services/games ./services/games/
+# Root workspaces list `frontend`; include package.json so `bun install` resolves.
+COPY frontend/package.json ./frontend/package.json
 
 WORKDIR /app
 RUN bun install
