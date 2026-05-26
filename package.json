@@ -4,6 +4,7 @@
   "workspaces": [
     "services/*",
     "packages/*",
+    "packages/@crash/*",
     "frontend"
   ],
   "scripts": {
