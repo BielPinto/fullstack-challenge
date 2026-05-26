@@ -7,6 +7,7 @@ import {
   type BetRepositoryPort,
 } from "../ports/game.persistence";
 import { WALLET_GATEWAY, type WalletGatewayPort } from "../ports/wallet-gateway.port";
+import { GAME_EVENTS, type GameEventsPort } from "../ports/game-events.port";
 import { GameRoundService } from "../services/game-round.service";
 import {
   BetNotActiveError,
@@ -34,6 +35,8 @@ export class CashOutBetUseCase {
     private readonly bets: BetRepositoryPort,
     @Inject(WALLET_GATEWAY)
     private readonly walletGateway: WalletGatewayPort,
+    @Inject(GAME_EVENTS)
+    private readonly events: GameEventsPort,
   ) {}
 
   async execute(input: CashOutBetInput): Promise<CashOutBetResult> {
@@ -92,6 +95,8 @@ export class CashOutBetUseCase {
     if (!updated) {
       throw new Error("Bet missing after cashout");
     }
+
+    this.events.broadcastBetCashedOut(updated);
 
     return {
       bet: updated,

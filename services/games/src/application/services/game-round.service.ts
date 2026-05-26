@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { RoundPhase } from "@prisma/client";
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import {
   BET_REPOSITORY,
   ROUND_REPOSITORY,
@@ -8,6 +8,10 @@ import {
   type RoundRecord,
   type RoundRepositoryPort,
 } from "../ports/game.persistence";
+import {
+  GAME_EVENTS,
+  type GameEventsPort,
+} from "../ports/game-events.port";
 import {
   commitServerSecret,
   deriveCrashOutcome,
@@ -17,19 +21,27 @@ import {
 
 const DEFAULT_BETTING_WINDOW_MS = 10_000;
 const SETTLED_PAUSE_MS = 2_000;
+const DEFAULT_TICK_INTERVAL_MS = 100;
 
 @Injectable()
 export class GameRoundService {
   private readonly logger = new Logger(GameRoundService.name);
   private schedulerTimer: ReturnType<typeof setTimeout> | null = null;
   private bootstrapped = false;
+  private readonly tickIntervalMs: number;
 
   constructor(
     @Inject(ROUND_REPOSITORY)
     private readonly rounds: RoundRepositoryPort,
     @Inject(BET_REPOSITORY)
     private readonly bets: BetRepositoryPort,
-  ) {}
+    @Inject(GAME_EVENTS)
+    private readonly events: GameEventsPort,
+  ) {
+    this.tickIntervalMs = Number(
+      process.env.RUNNING_TICK_INTERVAL_MS ?? DEFAULT_TICK_INTERVAL_MS,
+    );
+  }
 
   async ensureSchedulerStarted(): Promise<void> {
     if (this.bootstrapped) {
@@ -42,6 +54,7 @@ export class GameRoundService {
       active = await this.createBettingRound();
     }
 
+    await this.publishRoundSnapshot(active);
     this.scheduleNextTick(active);
   }
 
@@ -70,6 +83,16 @@ export class GameRoundService {
     });
   }
 
+  async publishRoundSnapshot(round: RoundRecord): Promise<void> {
+    const currentMultiplierMicro = await this.getCurrentMultiplierMicro(round);
+    const roundBets = await this.bets.listPublicBetsForRound(round.id);
+    this.events.broadcastRoundState({
+      round,
+      currentMultiplierMicro,
+      bets: roundBets,
+    });
+  }
+
   private scheduleNextTick(round: RoundRecord): void {
     if (this.schedulerTimer) {
       clearTimeout(this.schedulerTimer);
@@ -82,7 +105,11 @@ export class GameRoundService {
       delayMs = Math.max(100, round.bettingEndsAt.getTime() - now);
     } else if (round.phase === RoundPhase.RUNNING && round.runningStartedAt && round.runDurationMs) {
       const crashAt = round.runningStartedAt.getTime() + round.runDurationMs;
-      delayMs = Math.max(100, crashAt - now);
+      const remainingMs = crashAt - now;
+      delayMs =
+        remainingMs > 0
+          ? Math.min(this.tickIntervalMs, remainingMs)
+          : 0;
     } else if (round.phase === RoundPhase.SETTLED) {
       delayMs = SETTLED_PAUSE_MS;
     }
@@ -100,6 +127,7 @@ export class GameRoundService {
         this.scheduleNextTick(active);
       } else {
         const created = await this.createBettingRound();
+        await this.publishRoundSnapshot(created);
         this.scheduleNextTick(created);
       }
       return;
@@ -107,6 +135,8 @@ export class GameRoundService {
 
     if (round.phase === RoundPhase.SETTLED) {
       const next = await this.createBettingRound();
+      this.events.broadcastRoundPhase(next);
+      await this.publishRoundSnapshot(next);
       this.scheduleNextTick(next);
       return;
     }
@@ -117,21 +147,41 @@ export class GameRoundService {
         return;
       }
       const running = await this.startRunningPhase(round);
+      this.events.broadcastRoundPhase(running);
+      await this.publishRoundSnapshot(running);
       this.scheduleNextTick(running);
       return;
     }
 
     if (round.phase === RoundPhase.RUNNING) {
-      if (!round.runningStartedAt || !round.runDurationMs) {
+      if (!round.runningStartedAt || !round.runDurationMs || !round.crashMultiplierMicro) {
         this.scheduleNextTick(round);
         return;
       }
+
+      const elapsedMs = Date.now() - round.runningStartedAt.getTime();
       const crashAt = round.runningStartedAt.getTime() + round.runDurationMs;
+
       if (crashAt > Date.now()) {
+        const multiplierMicro = displayMultiplierMicroAtProgress({
+          crashMultiplierMicro: round.crashMultiplierMicro,
+          runDurationMs: round.runDurationMs,
+          elapsedMs,
+        });
+        this.events.broadcastRoundTick({
+          roundId: round.id,
+          currentMultiplierMicro: multiplierMicro,
+          elapsedMs,
+          runDurationMs: round.runDurationMs,
+        });
         this.scheduleNextTick(round);
         return;
       }
+
       const settled = await this.settleRound(round);
+      this.events.broadcastRoundCrashed(settled);
+      this.events.broadcastRoundPhase(settled);
+      await this.publishRoundSnapshot(settled);
       this.scheduleNextTick(settled);
     }
   }
@@ -158,6 +208,7 @@ export class GameRoundService {
       bettingEndsAt,
     });
 
+    this.events.broadcastRoundPhase(round);
     this.logger.log(`Round ${round.id} opened for betting until ${bettingEndsAt.toISOString()}`);
     return round;
   }

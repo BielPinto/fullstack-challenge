@@ -173,11 +173,27 @@ Ações do jogador (**apostar**, **cash out**) são **REST**; o WebSocket é ape
 | Aspecto            | Detalhe                                                                                 |
 | ------------------ | --------------------------------------------------------------------------------------- |
 | **Direção**        | Servidor → cliente (eventos em tempo real)                                              |
-| **Stack esperada** | `@nestjs/websockets` + `socket.io` ou `ws`                                              |
+| **Stack**          | `@nestjs/websockets` + `socket.io` (`IoAdapter`)                                        |
 | **Uso**            | Sincronizar multiplicador, fases da rodada, apostas/cashouts de outros jogadores, crash |
+| **URL (dev)**      | **Direto** em `http://localhost:4001` (`VITE_GAME_WS_URL`) — ver decisão abaixo       |
 
 
-O frontend pode conectar **diretamente** ao Game Service (ex.: `ws://localhost:4001`) ou via proxy no Kong, conforme implementação do candidato.
+**Decisão Kong vs URL direta (local):** REST continua em `http://localhost:8000` (Kong). WebSocket usa **conexão direta** ao Game Service na porta `4001`, configurada via `VITE_GAME_WS_URL`. Motivo: no dev local, proxy WebSocket no Kong exige validar upgrade/path do Socket.IO (`/socket.io/`); REST já está estável em `/games`. Em produção, um único host pode expor WS no mesmo domínio com rota dedicada no gateway.
+
+**Sincronização do multiplicador:** ticks **server-side** a cada `RUNNING_TICK_INTERVAL_MS` (padrão 100ms). O servidor envia `round:tick` com `currentMultiplier`, `elapsedMs` e `runDurationMs`. Clientes podem interpolar entre ticks, mas o servidor é autoritativo. Ao conectar, o cliente recebe `round:state` com snapshot completo.
+
+**Eventos emitidos** (constantes em `@crash/contracts` → `GAME_WS_EVENTS`):
+
+| Evento            | Quando                                              |
+| ----------------- | --------------------------------------------------- |
+| `round:state`     | Conexão + transições relevantes (snapshot completo) |
+| `round:phase`     | Mudança de fase (`BETTING` → `RUNNING` → `SETTLED`) |
+| `round:tick`      | Durante `RUNNING` (multiplicador atual)             |
+| `round:crashed`   | Fim da rodada + payload `verify` (provably fair)    |
+| `bet:placed`      | Aposta confirmada (débito OK)                       |
+| `bet:cashed_out`  | Cash out de qualquer jogador                        |
+
+**Scheduler:** `GameRoundService` avança fases por timer (fim da janela de apostas, crash pré-determinado, pausa pós-settle). Não há mensagens do cliente no socket — apostar/sacar permanecem REST.
 
 ### 4.4 Game Service ↔ Wallet Service (mensageria)
 
