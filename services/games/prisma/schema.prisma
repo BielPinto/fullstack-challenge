@@ -1,0 +1,65 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum RoundPhase {
+  BETTING
+  RUNNING
+  SETTLED
+}
+
+enum BetStatus {
+  DEBIT_PENDING
+  ACTIVE
+  CASHED_OUT
+  LOST
+  DEBIT_FAILED
+}
+
+model Round {
+  id                     String      @id @default(uuid()) @db.Uuid
+  phase                  RoundPhase
+  commitHash             String      @map("commit_hash")
+  serverSecret           String      @map("server_secret")
+  clientSeed             String      @map("client_seed")
+  nonce                  String
+
+  crashMultiplierMicro   BigInt?     @map("crash_multiplier_micro")
+  runDurationMs          Int?        @map("run_duration_ms")
+
+  bettingEndsAt          DateTime    @map("betting_ends_at")
+  runningStartedAt       DateTime?   @map("running_started_at")
+  settledAt              DateTime?   @map("settled_at")
+
+  createdAt              DateTime    @default(now()) @map("created_at")
+
+  bets                   Bet[]
+
+  @@map("rounds")
+}
+
+model Bet {
+  id                      String     @id @default(uuid()) @db.Uuid
+  roundId                 String     @map("round_id") @db.Uuid
+  userId                  String     @map("user_id")
+  amountInCents           BigInt     @map("amount_in_cents")
+  status                  BetStatus
+
+  cashoutMultiplierMicro  BigInt?    @map("cashout_multiplier_micro")
+  payoutInCents           BigInt?    @map("payout_in_cents")
+
+  debitCommandId          String     @unique @map("debit_command_id")
+
+  createdAt               DateTime   @default(now()) @map("created_at")
+  updatedAt               DateTime   @updatedAt @map("updated_at")
+
+  round                   Round      @relation(fields: [roundId], references: [id])
+
+  @@unique([roundId, userId])
+  @@map("bets")
+}
