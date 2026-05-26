@@ -12,12 +12,16 @@ export interface JwtPayload {
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor() {
-    const issuer = process.env.KEYCLOAK_ISSUER;
+    const issuerEnv = process.env.KEYCLOAK_ISSUER;
     const jwksUri = process.env.KEYCLOAK_JWKS_URI;
 
-    if (!issuer || !jwksUri) {
+    if (!issuerEnv || !jwksUri) {
       throw new Error("KEYCLOAK_ISSUER and KEYCLOAK_JWKS_URI must be set");
     }
+
+    const issuer = issuerEnv.includes(",")
+      ? issuerEnv.split(",").map((value) => value.trim())
+      : issuerEnv;
 
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),

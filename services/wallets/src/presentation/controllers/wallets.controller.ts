@@ -11,7 +11,7 @@ import { GetMyWalletUseCase } from "../../application/use-cases/get-my-wallet.us
 import { JwtAuthGuard } from "../../infrastructure/auth/jwt-auth.guard";
 import { CurrentUser } from "../decorators/current-user.decorator";
 import type { JwtPayload } from "../../infrastructure/auth/jwt.strategy";
-import { HealthCheckResponseDto } from "../dtos/health-check-response.dto";
+import type { HealthCheckResponseDto } from "../dtos/health-check-response.dto";
 import { WalletResponseDto } from "../dtos/wallet-response.dto";
 
 @Controller()
