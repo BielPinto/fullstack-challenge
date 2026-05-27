@@ -4,6 +4,7 @@ import {
   WALLET_EVENT_ROUTING_KEYS,
   type WalletCreditRequestedV1,
   type WalletCreditSucceededV1,
+  type WalletDebitFailedV1,
   type WalletDebitRequestedV1,
   type WalletDebitSucceededV1,
   type WalletResultEventV1,
@@ -206,6 +207,53 @@ export async function publishDebitAndWait(
       WALLET_EVENT_ROUTING_KEYS.debitSucceededV1,
       (event): event is WalletDebitSucceededV1 =>
         event.type === "WalletDebitSucceeded" && event.commandId === commandId,
+    );
+
+    channel.publish(
+      AMQP_EXCHANGES.walletCommands,
+      WALLET_COMMAND_ROUTING_KEYS.debitRequestV1,
+      wireCommand(command),
+      { contentType: "application/json", persistent: true },
+    );
+
+    return await eventPromise;
+  } finally {
+    await channel.close();
+    await connection.close();
+  }
+}
+
+export async function publishDebitAndExpectFailed(
+  amountInCents: bigint,
+  expectedReason: WalletDebitFailedV1["reason"] = "insufficient_funds",
+  overrides?: Partial<Pick<WalletDebitRequestedV1, "commandId" | "userId" | "gameRoundId" | "betId">>,
+): Promise<WalletDebitFailedV1> {
+  const commandId = overrides?.commandId ?? `e2e-debit-fail-${crypto.randomUUID()}`;
+  const correlationId = `e2e-corr-fail-${crypto.randomUUID()}`;
+  const userId = overrides?.userId ?? PLAYER_USER_ID;
+
+  const command: WalletDebitRequestedV1 = {
+    type: "WalletDebitRequested",
+    version: "v1",
+    commandId,
+    correlationId,
+    createdAt: new Date().toISOString(),
+    userId,
+    gameRoundId: overrides?.gameRoundId ?? "e2e-round-fail",
+    betId: overrides?.betId ?? "e2e-bet-fail",
+    amount: { amountInCents, currency: "BRL" },
+  };
+
+  const { connection, channel } = await connectRabbit();
+
+  try {
+    const eventPromise = waitForWalletEvent(
+      channel,
+      WALLET_EVENT_ROUTING_KEYS.debitFailedV1,
+      (event): event is WalletDebitFailedV1 =>
+        event.type === "WalletDebitFailed" &&
+        event.commandId === commandId &&
+        event.reason === expectedReason,
     );
 
     channel.publish(

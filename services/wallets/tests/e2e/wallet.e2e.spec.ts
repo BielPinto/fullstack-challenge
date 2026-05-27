@@ -11,6 +11,8 @@ import {
   getPlayerToken,
   KONG_BASE_URL,
   PLAYER_USER_ID,
+  publishCreditAndWait,
+  publishDebitAndExpectFailed,
   publishDebitAndWait,
   SEED_BALANCE_CENTS,
   waitForKeycloak,
@@ -81,6 +83,41 @@ describe("wallets e2e (docker:up)", () => {
 
       const after = await fetchBalanceCents(token);
       expect(after).toBe(expectedAfter);
+    }, 30_000);
+
+    it("credit via RabbitMQ increases balance on GET /wallets/me", async () => {
+      const creditAmount = 75n;
+      const expectedAfter = balanceCents + creditAmount;
+
+      const result = await publishCreditAndWait(creditAmount);
+      expect(result.type).toBe("WalletCreditSucceeded");
+      expect(result.balanceAfterInCents).toBe(expectedAfter);
+
+      const after = await fetchBalanceCents(token);
+      expect(after).toBe(expectedAfter);
+    }, 30_000);
+
+    it("debit fails with insufficient_funds when amount exceeds balance", async () => {
+      const drainAmount = balanceCents;
+      await publishDebitAndWait(drainAmount);
+
+      const afterDrain = await fetchBalanceCents(token);
+      expect(afterDrain).toBe(0n);
+
+      const failed = await publishDebitAndExpectFailed(1n, "insufficient_funds");
+      expect(failed.reason).toBe("insufficient_funds");
+
+      const stillZero = await fetchBalanceCents(token);
+      expect(stillZero).toBe(0n);
+
+      await publishCreditAndWait(SEED_BALANCE_CENTS);
+    }, 45_000);
+
+    it("debit fails with wallet_not_found for unknown user", async () => {
+      const failed = await publishDebitAndExpectFailed(100n, "wallet_not_found", {
+        userId: "00000000-0000-4000-8000-000000000099",
+      });
+      expect(failed.reason).toBe("wallet_not_found");
     }, 30_000);
 
     it("duplicate debit command is idempotent (same commandId)", async () => {

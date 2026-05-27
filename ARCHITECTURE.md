@@ -1,6 +1,6 @@
 # Arquitetura — Crash Game (Full-stack Challenge)
 
-Documento de análise da estrutura do repositório, visão da arquitetura alvo e como as tecnologias se comunicam. Baseado no estado atual do scaffold e nos requisitos definidos no `README.md`.
+Documento de análise da estrutura do repositório, visão da arquitetura implementada e como as tecnologias se comunicam. Baseado no estado atual do monorepo e nos requisitos definidos no `README.md`.
 
 ---
 
@@ -37,25 +37,31 @@ fullstack-challenge/
 │   │   └── src/
 │   │       ├── main.ts
 │   │       ├── app.module.ts
-│   │       └── presentation/    # Apenas GET /health (scaffold)
+│   │       ├── domain/          # Regras de Round/Bet/provably fair
+│   │       ├── application/     # Use cases + scheduler de rodada
+│   │       ├── infrastructure/  # Prisma, RabbitMQ, auth, realtime
+│   │       └── presentation/    # REST + WebSocket gateway
 │   └── wallets/                 # @crash/wallets — porta 4002
-│       └── src/                 # Mesma estrutura mínima
-├── packages/                    # (vazio) — libs compartilhadas ex.: @crash/eslint
-└── frontend/                    # (não existe ainda) — candidato implementa
+│       └── src/                 # Domain + use cases + consumer AMQP + REST
+├── packages/
+│   └── @crash/contracts/        # Contratos AMQP e eventos WebSocket
+└── frontend/                    # Vite + React (porta 3000 em Docker / 5173 local)
 ```
 
 ### O que já está implementado
 
 
-| Componente                                                          | Status                                           |
-| ------------------------------------------------------------------- | ------------------------------------------------ |
-| Docker Compose (Postgres, RabbitMQ, Keycloak, Kong, games, wallets) | ✅                                                |
-| Kong roteando `/games` → games:4001 e `/wallets` → wallets:4002     | ✅                                                |
-| Bancos `games` e `wallets` criados no init do Postgres              | ✅                                                |
-| Realm Keycloak `crash-game` importado automaticamente               | ✅                                                |
-| NestJS + Bun nos dois serviços com health check                     | ✅                                                |
-| Camadas DDD (`domain/`, `application/`, etc.)                       | 📁 Planejado no README, pastas ainda não criadas |
-| Frontend, WebSocket, domínio de jogo/carteira, mensageria           | ⏳ A implementar                                  |
+| Componente                                                           | Status |
+| -------------------------------------------------------------------- | ------ |
+| Docker Compose (Postgres, RabbitMQ, Keycloak, Kong, games, wallets) | ✅     |
+| Kong roteando `/games` → games:4001 e `/wallets` → wallets:4002     | ✅     |
+| Bancos `games` e `wallets` criados no init do Postgres              | ✅     |
+| Realm Keycloak `crash-game` importado automaticamente                | ✅     |
+| Camadas DDD em ambos os serviços (`domain` → `presentation`)         | ✅     |
+| Contratos compartilhados (`@crash/contracts`) para AMQP e WS         | ✅     |
+| Game com engine de rodada + provably fair + WebSocket               | ✅     |
+| Wallet com idempotência de comandos e publicação de eventos          | ✅     |
+| Frontend (login OIDC + página de jogo em tempo real)                | ✅     |
 
 
 ### Monorepo (Bun workspaces)
@@ -307,7 +313,41 @@ src/
 └── presentation/     # Controllers REST, gateways WebSocket, DTOs
 ```
 
-Hoje apenas `presentation/controllers` com health existe; as demais pastas devem ser criadas na implementação.
+As camadas acima já estão implementadas nos dois serviços, com responsabilidades bem separadas.
+
+### Revisão por serviço (Fase 7)
+
+#### Game Service (`services/games`)
+
+| Camada | Implementação atual |
+| ------ | ------------------- |
+| **Domain** | Regras de aposta, limites e erros de domínio; cálculo de payout e provably fair |
+| **Application** | Casos de uso (`place bet`, `cash out`, histórico, verificação) + `GameRoundService` para ciclo da rodada |
+| **Infrastructure** | Persistência Prisma, gateway RabbitMQ para Wallet (request/reply por `commandId`), autenticação JWT, adaptador Socket.IO |
+| **Presentation** | Endpoints REST em `games.controller.ts` e gateway WS (`game.gateway.ts`) com eventos `round:*` e `bet:*` |
+
+Principais responsabilidades:
+
+- Orquestrar o estado da rodada (`BETTING` → `RUNNING` → `SETTLED`) com scheduler server-side.
+- Registrar apostas e cashouts com consistência eventual via integração assíncrona com a Wallet.
+- Expor dados de verificação do provably fair em `/games/rounds/:id/verify`.
+- Publicar o estado em tempo real para múltiplos clientes conectados.
+
+#### Wallet Service (`services/wallets`)
+
+| Camada | Implementação atual |
+| ------ | ------------------- |
+| **Domain** | Entidade `Wallet`, VO de dinheiro em centavos e invariantes de saldo |
+| **Application** | Casos de uso de criação/consulta e handler de processamento de comandos de carteira |
+| **Infrastructure** | Repositórios Prisma, controle de idempotência (`processed commands`), consumer de comandos RabbitMQ e publisher de eventos |
+| **Presentation** | Endpoints autenticados de criação e consulta (`POST /wallets`, `GET /wallets/me`) |
+
+Principais responsabilidades:
+
+- Manter saldo por usuário sem uso de ponto flutuante.
+- Processar comandos de débito/crédito vindos da fila com segurança de reprocessamento.
+- Publicar eventos de sucesso/falha (`WalletDebit*`, `WalletCredit*`) para o Game.
+- Fornecer API REST apenas para lifecycle da carteira do jogador (não para movimentação interna).
 
 ---
 
@@ -431,16 +471,14 @@ stateDiagram-v2
 
 ---
 
-## 11. Próximos passos de implementação (checklist)
+## 11. Próximos passos de evolução (checklist)
 
-1. Criar pastas DDD em `services/games` e `services/wallets`.
-2. Integrar ORM (Prisma/MikroORM/TypeORM) + migrations no `docker:up`.
-3. Implementar produtor/consumidor RabbitMQ e contratos de eventos.
-4. Adicionar gateway WebSocket no Game Service.
-5. Middleware JWT NestJS nos endpoints `Auth: Sim`.
-6. Scaffold `frontend/` e descomentar serviço no `docker-compose.yml`.
-7. Testes unitários (domínio) e E2E (API + docker).
+1. Evoluir observabilidade (métricas de rodada, latência AMQP e WS, tracing ponta a ponta).
+2. Fortalecer resiliência de mensageria (retry/backoff, DLQ e dashboards de falha).
+3. Expandir testes E2E multi-serviço com cenários de competição e carga leve.
+4. Refinar estratégia de deploy de WebSocket atrás de gateway único para produção.
+5. Documentar versionamento de contratos AMQP/WS para mudanças retrocompatíveis.
 
 ---
 
-*Documento gerado com base na análise do repositório `fullstack-challenge` — scaffold Jungle Gaming.*
+*Documento atualizado com base na implementação atual do repositório `fullstack-challenge` (Jungle Gaming Crash Game).*
