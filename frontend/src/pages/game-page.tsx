@@ -9,6 +9,7 @@ import { BetsFeed } from "@/components/bets-feed";
 import { CrashMultiplierChart } from "@/components/crash-multiplier-chart";
 import { GameShell } from "@/components/game-shell";
 import { RoundHistoryBar } from "@/components/round-history-bar";
+import { RoundVerifyDialog } from "@/components/round-verify-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -109,6 +110,7 @@ export default function GamePage(): ReactElement {
   const potentialPayout = stakeNumber > 0 && phase === "RUNNING" ? stakeNumber * currentMult : null;
 
   const [stakeInput, setStakeInput] = useState("10");
+  const [verifyRoundId, setVerifyRoundId] = useState<string | null>(null);
 
   const betMutation = useMutation({
     mutationFn: async () => {
@@ -165,9 +167,23 @@ export default function GamePage(): ReactElement {
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle>Curva do crash</CardTitle>
-            <CardDescription>
-              Commit da rodada (antes do run):{" "}
-              <span className="break-all font-mono text-[11px] text-zinc-300">{round?.commitHash ?? "—"}</span>
+            <CardDescription className="space-y-2">
+              <p>
+                Commit da rodada (antes do run):{" "}
+                <span className="break-all font-mono text-[11px] text-zinc-300">{round?.commitHash ?? "—"}</span>
+              </p>
+              <p className="flex flex-wrap gap-x-4 gap-y-1 text-[11px]">
+                <span>
+                  Client seed:{" "}
+                  <span className="font-mono text-zinc-300">{round?.clientSeed ?? "—"}</span>
+                </span>
+                <span>
+                  Nonce: <span className="font-mono text-zinc-300">{round?.nonce ?? "—"}</span>
+                </span>
+              </p>
+              <p className="text-[10px] leading-relaxed text-zinc-500">
+                Após o crash, o server secret é revelado — clique em uma rodada no histórico para verificar.
+              </p>
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -255,13 +271,23 @@ export default function GamePage(): ReactElement {
         <Card>
           <CardHeader>
             <CardTitle>Histórico (~20)</CardTitle>
-            <CardDescription>Últimos crash points — cores por altura.</CardDescription>
+            <CardDescription>Últimos crash points — clique para verificar provably fair.</CardDescription>
           </CardHeader>
           <CardContent>
-            <RoundHistoryBar items={historyQuery.data?.items ?? []} loading={historyQuery.isLoading} />
+            <RoundHistoryBar
+              items={historyQuery.data?.items ?? []}
+              loading={historyQuery.isLoading}
+              onRoundClick={setVerifyRoundId}
+            />
           </CardContent>
         </Card>
       </div>
+
+      <RoundVerifyDialog
+        roundId={verifyRoundId}
+        open={verifyRoundId !== null}
+        onClose={() => setVerifyRoundId(null)}
+      />
     </GameShell>
   );
 }
