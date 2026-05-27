@@ -2,6 +2,8 @@
 
 Instruções para subir a stack, verificar saúde e testar cada componente do Crash Game em desenvolvimento local.
 
+Setup zero-touch, decisões técnicas e URLs: **[IMPLEMENTATION.md](IMPLEMENTATION.md)**.
+
 ## Pré-requisitos
 
 - [Bun](https://bun.sh) >= 1.x
@@ -14,8 +16,12 @@ Na raiz do monorepo (`fullstack-challenge/`):
 
 ```bash
 bun install
-bun run docker:up
+bun run docker:up              # foreground + rebuild
+# ou
+bun run docker:up:detached     # background + rebuild
 ```
+
+Não é necessário copiar `.env` manualmente: o Compose injeta variáveis inline; `docker:prepare` só cria `.env` para dev fora do Docker.
 
 Aguarde todos os containers ficarem **healthy**:
 
@@ -23,10 +29,10 @@ Aguarde todos os containers ficarem **healthy**:
 docker compose ps
 ```
 
-Se alterou código dos serviços:
+Se alterou código dos serviços, `docker:up` já passa `--build`. Para rebuild isolado:
 
 ```bash
-docker compose build games wallets
+docker compose build games wallets frontend
 docker compose up -d
 ```
 

@@ -1,5 +1,9 @@
 import { describe, expect, it, beforeAll } from "bun:test";
 import {
+  ensurePlayerBalance,
+  SEED_BALANCE_CENTS,
+} from "../../../wallets/tests/e2e/helpers";
+import {
   cashOut,
   fetchBalanceCents,
   GAME_BASE_URL,
@@ -31,6 +35,7 @@ describe("games e2e (docker:up)", () => {
     await waitForService(`${KONG_BASE_URL}/games/rounds/current`);
     await waitForKeycloak();
     token = await getPlayerToken();
+    await ensurePlayerBalance(token, SEED_BALANCE_CENTS);
     const balance = await fetchBalanceCents(token);
     expect(balance).toBeGreaterThan(0n);
   }, 120_000);
@@ -79,8 +84,18 @@ describe("games e2e (docker:up)", () => {
   }, 60_000);
 
   it("bet → running → cashout updates wallet balance", async () => {
+    await waitForOpenBettingRound(token, { timeoutMs: 180_000 });
+    const balanceBeforeBet = await fetchBalanceCents(token);
+
+    const placed = await placeBet(token, BET_AMOUNT_CENTS);
+    expectCreated(placed.status);
+    if (!("betId" in placed.body)) {
+      throw new Error(`Unexpected place bet body: ${JSON.stringify(placed.body)}`);
+    }
+
     await waitForRoundPhase("RUNNING", { timeoutMs: 60_000 });
-    const balanceBeforeCashout = await fetchBalanceCents(token);
+    const balanceAfterDebit = await fetchBalanceCents(token);
+    expect(balanceAfterDebit).toBe(balanceBeforeBet - BET_AMOUNT_CENTS);
 
     const cashed = await cashOut(token);
     expectCreated(cashed.status);
@@ -95,15 +110,18 @@ describe("games e2e (docker:up)", () => {
     })();
 
     const afterCashout = await fetchBalanceCents(token);
-    expect(afterCashout).toBe(balanceBeforeCashout + payoutFromDecimal);
+    expect(afterCashout).toBe(balanceAfterDebit + payoutFromDecimal);
     expect(payoutFromDecimal).toBeGreaterThan(0n);
-  }, 90_000);
+  }, 180_000);
 
   it("rejects bet with insufficient wallet balance", async () => {
     await waitForOpenBettingRound(token, { timeoutMs: 120_000 });
     let balanceBefore = await fetchBalanceCents(token);
 
-    if (balanceBefore >= MAX_BET_CENTS) {
+    // Must stay below MAX_BET so stake (balanceBefore + 1) is still a legal amount.
+    let drains = 0;
+    while (balanceBefore >= MAX_BET_CENTS && drains < 12) {
+      await waitForOpenBettingRound(token, { timeoutMs: 120_000 });
       const drain = await placeBet(token, MAX_BET_CENTS);
       expectCreated(drain.status);
       if (!("roundId" in drain.body)) {
@@ -113,6 +131,7 @@ describe("games e2e (docker:up)", () => {
       await waitForRoundToEnd(drain.body.roundId, { timeoutMs: 150_000 });
       await waitForOpenBettingRound(token, { timeoutMs: 120_000 });
       balanceBefore = await fetchBalanceCents(token);
+      drains++;
     }
 
     expect(balanceBefore).toBeLessThan(MAX_BET_CENTS);
@@ -127,7 +146,7 @@ describe("games e2e (docker:up)", () => {
 
     const balanceAfter = await fetchBalanceCents(token);
     expect(balanceAfter).toBe(balanceBefore);
-  }, 60_000);
+  }, 480_000);
 
   it("bet → crash → bet lost and stake not returned", async () => {
     await waitForOpenBettingRound(token, { timeoutMs: 120_000 });
