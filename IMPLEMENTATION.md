@@ -75,7 +75,7 @@ O `userId` do `player` no realm (`f47ac10b-58cc-4372-a567-0e02b2c3d479`) corresp
 | **Dinheiro** | `bigint` centavos no domínio, Postgres `BIGINT`, API expõe strings | Sem float; multiplicador em **micro-units** (`1.00x` = `1_000_000n`) |
 | **Mensageria** | RabbitMQ; contratos em `@crash/contracts` (`wallet.commands` / `wallet.events`) | RPC com `correlationId` + idempotência por `commandId`; consistência eventual |
 | **Wallet REST** | Apenas criar/consultar carteira; débito/crédito só via fila | Game orquestra saga de aposta |
-| **Provably fair** | HMAC-SHA256(serverSecret, clientSeed:nonce); crash em basis points | Verificação em `GET /games/rounds/:id/verify` |
+| **Provably fair** | Commit/reveal + HMAC-SHA256(serverSecret, clientSeed:nonce); micro-units | `GET /games/rounds/:id/verify` + guia [PROVABLY_FAIR.md](PROVABLY_FAIR.md) e `bun scripts/verify-round.ts <roundId>` |
 | **Tempo real** | Scheduler no Game + Socket.IO server-push (~100ms/tick) | Cliente não envia ações no WS |
 | **Gateway** | Kong só para REST; WS direto em `:4001` | Produção pode unificar host com rota WS no gateway |
 | **Auth** | JWT Keycloak (JWKS); issuers Docker + localhost | Saldo seedado via `SEED_PLAYER_*` no Wallet |
@@ -95,6 +95,8 @@ fullstack-challenge/
 ├── frontend/                # UI + OIDC
 ├── docker/                  # kong, keycloak, postgres
 ├── scripts/docker-prepare.sh
+├── scripts/verify-round.ts   # verificação offline provably fair
+├── PROVABLY_FAIR.md          # commit/reveal, algoritmo, auditoria
 ├── docker-compose.yml
 ├── IMPLEMENTATION.md        # este arquivo
 ├── ARCHITECTURE.md
@@ -166,3 +168,4 @@ cp frontend/.env.example frontend/.env
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Diagramas, camadas DDD, fluxos Game ↔ Wallet |
 | [TESTING_SERVICES.md](TESTING_SERVICES.md) | Consultas, `curl`, RabbitMQ, Postgres, Socket.IO |
 | [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) | Plano de fases da implementação |
+| [PROVABLY_FAIR.md](PROVABLY_FAIR.md) | Commit/reveal, algoritmo, verificação offline (`scripts/verify-round.ts`) |
