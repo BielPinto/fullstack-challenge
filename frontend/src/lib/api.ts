@@ -94,6 +94,17 @@ export type RoundHistoryItemDto = {
   settledAt: string;
 };
 
+export type VerifyRoundDto = {
+  roundId: string;
+  commitHash: string;
+  serverSecret: string | null;
+  clientSeed: string;
+  nonce: string;
+  crashMultiplier: string | null;
+  runDurationMs: number | null;
+  verified: boolean;
+};
+
 export type BetActionResponseDto = {
   betId: string;
   roundId: string;
@@ -119,6 +130,8 @@ export const gamesApi = {
       method: "POST",
       accessToken: token,
     }),
+  verifyRound: (roundId: string) =>
+    apiFetch<VerifyRoundDto>(`/games/rounds/${encodeURIComponent(roundId)}/verify`),
 };
 
 export const walletsApi = {
