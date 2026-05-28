@@ -27,6 +27,7 @@ O projeto é um **monorepo Bun** para um jogo de cassino **Crash Game** em tempo
 ```
 fullstack-challenge/
 ├── package.json                 # Workspaces Bun + scripts docker:*
+├── MESSAGING.md                 # Saga Game ↔ Wallet (AMQP)
 ├── docker-compose.yml           # Orquestração de toda a stack
 ├── docker/
 │   ├── kong/kong.yml            # Rotas declarativas Kong (DB-less)
@@ -203,7 +204,16 @@ Ações do jogador (**apostar**, **cash out**) são **REST**; o WebSocket é ape
 
 ### 4.4 Game Service ↔ Wallet Service (mensageria)
 
-Comunicação **assíncrona** via **RabbitMQ** (`amqp://admin:admin@rabbitmq:5672`). Crédito e débito **não** são expostos por REST no Wallet.
+Comunicação **assíncrona** via **RabbitMQ** (`amqp://admin:admin@rabbitmq:5672`). Crédito e débito **não** são expostos por REST no Wallet. Contratos versionados em `@crash/contracts`; detalhes das três sagas (aposta, cash out, crash), routing keys, idempotência e compensações: **[MESSAGING.md](MESSAGING.md)**.
+
+| Exchange | Routing key (exemplo) | Payload |
+| -------- | --------------------- | ------- |
+| `wallet.commands` | `wallet.debit.request.v1` | `WalletDebitRequestedV1` |
+| `wallet.commands` | `wallet.credit.request.v1` | `WalletCreditRequestedV1` |
+| `wallet.events` | `wallet.debit.succeeded.v1` | `WalletDebitSucceededV1` |
+| `wallet.events` | `wallet.debit.failed.v1` | `WalletDebitFailedV1` |
+| `wallet.events` | `wallet.credit.succeeded.v1` | `WalletCreditSucceededV1` |
+| `wallet.events` | `wallet.credit.failed.v1` | `WalletCreditFailedV1` |
 
 ```mermaid
 sequenceDiagram
@@ -217,30 +227,39 @@ sequenceDiagram
 
     U->>FE: Apostar (REST)
     FE->>G: POST /games/bet + JWT
-    G->>DB_G: Registrar Bet (pendente)
-    G->>RMQ: Evento: DebitRequested
-    RMQ->>W: Consumir DebitRequested
-    W->>DB_W: Débito (centavos/BIGINT)
-    W->>RMQ: Evento: DebitSucceeded / DebitFailed
-    RMQ->>G: Consumir resultado
+    G->>DB_G: Bet DEBIT_PENDING
+    G->>RMQ: WalletDebitRequestedV1
+    RMQ->>W: wallet.service.commands
+    W->>DB_W: Débito (centavos/BIGINT, idempotente por commandId)
     alt Sucesso
-        G->>DB_G: Confirmar aposta
-        G-->>FE: WS: bet_confirmed
-    else Falha (saldo insuficiente)
-        G->>DB_G: Cancelar/rejeitar
-        G-->>FE: Erro
+        W->>RMQ: WalletDebitSucceededV1
+        RMQ->>G: game.service.wallet-events
+        G->>DB_G: ACTIVE
+        G-->>FE: WS bet:placed
+    else Falha
+        W->>RMQ: WalletDebitFailedV1
+        RMQ->>G: game.service.wallet-events
+        G->>DB_G: deleteBet
+        G-->>FE: Erro REST
     end
 
-    Note over G,W: Cash out e crash seguem padrão similar<br/>(CreditRequested, liquidação, compensação)
+    Note over G,W: Cash out: WalletCreditRequestedV1 → succeeded ou revertCashout<br/>Crash: mark LOST local, sem mensagem Wallet
 ```
 
+**Sagas implementadas:**
 
+| Fluxo | Comando | Compensação no Game |
+| ----- | ------- | ------------------- |
+| Place bet | `WalletDebitRequestedV1` | `deleteBet` se débito falhar ou timeout |
+| Cash out | `WalletCreditRequestedV1` (`reason: cashout`) | `revertCashout` se crédito falhar |
+| Crash / settle | — | `markAllActiveBetsLost`; stake já debitado, sem crédito |
 
 **Princípios de design (avaliação):**
 
-- Eventos de domínio bem nomeados e versionáveis.
-- Estratégias de **compensação** (saga) se débito/crédito falhar após commit parcial.
-- Bônus: **Outbox/Inbox** transacional para entrega confiável.
+- Eventos de domínio bem nomeados e versionáveis (`*V1`, exchanges `wallet.commands` / `wallet.events`).
+- **Compensação** explícita: aposta removida após débito falho; cashout revertido após crédito falho.
+- RPC por `commandId` + timeout (`WALLET_RPC_TIMEOUT_MS`, padrão 15s) no gateway do Game.
+- Bônus: **Outbox/Inbox** transacional para entrega confiável (não implementado).
 
 ### 4.5 Serviços ↔ PostgreSQL
 
@@ -428,9 +447,9 @@ stateDiagram-v2
 
 
 
-1. **Fase de apostas** — `POST /games/bet` → débito assíncrono na Wallet.
-2. **Rodada ativa** — multiplicador enviado por WebSocket; `POST /games/bet/cashout` credita ganho.
-3. **Crash** — quem não sacou perde; eventos de crédito/compensação conforme regras.
+1. **Fase de apostas** — `POST /games/bet` → `WalletDebitRequestedV1` na Wallet ([MESSAGING.md](MESSAGING.md)).
+2. **Rodada ativa** — multiplicador enviado por WebSocket; `POST /games/bet/cashout` → `WalletCreditRequestedV1`.
+3. **Crash** — apostas `ACTIVE` → `LOST` no Game; **sem** crédito na Wallet (stake já debitado).
 4. **Provably fair** — `GET /games/rounds/:id/verify` para auditoria pelo jogador.
 
 ---
