@@ -1,4 +1,5 @@
-import { Inject, Injectable, Logger, forwardRef } from "@nestjs/common";
+import { Inject, Injectable, Logger } from "@nestjs/common";
+import { ModuleRef } from "@nestjs/core";
 import { RoundPhase } from "@prisma/client";
 import { randomBytes } from "node:crypto";
 import {
@@ -20,7 +21,6 @@ import {
 } from "../../domain/services/provably-fair";
 import { roundToDomain } from "../mappers/game-domain.mapper";
 import { GameMetricsService } from "../../infrastructure/observability/game-metrics.service";
-import { CashOutBetUseCase } from "../use-cases/cash-out-bet.use-case";
 
 const DEFAULT_BETTING_WINDOW_MS = 10_000;
 const SETTLED_PAUSE_MS = 2_000;
@@ -40,8 +40,7 @@ export class GameRoundService {
     private readonly bets: BetRepositoryPort,
     @Inject(GAME_EVENTS)
     private readonly events: GameEventsPort,
-    @Inject(forwardRef(() => CashOutBetUseCase))
-    private readonly cashOutBet: CashOutBetUseCase,
+    private readonly moduleRef: ModuleRef,
     private readonly metrics: GameMetricsService,
   ) {
     this.tickIntervalMs = Number(
@@ -180,7 +179,7 @@ export class GameRoundService {
           elapsedMs,
           runDurationMs: round.runDurationMs,
         });
-        await this.cashOutBet.processAutoCashoutsForRound(round.id, multiplierMicro);
+        await this.processAutoCashouts(round.id, multiplierMicro);
         this.scheduleNextTick(round);
         return;
       }
@@ -269,5 +268,15 @@ export class GameRoundService {
 
     this.logger.log(`Round ${roundRecord.id} settled (${lostCount} losing bets)`);
     return updated;
+  }
+
+  /** Lazy resolve to avoid circular import with CashOutBetUseCase at module load (Bun). */
+  private async processAutoCashouts(
+    roundId: string,
+    currentMultiplierMicro: bigint,
+  ): Promise<void> {
+    const { CashOutBetUseCase } = await import("../use-cases/cash-out-bet.use-case");
+    const cashOut = this.moduleRef.get(CashOutBetUseCase, { strict: false });
+    await cashOut.processAutoCashoutsForRound(roundId, currentMultiplierMicro);
   }
 }

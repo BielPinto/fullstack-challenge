@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger, forwardRef } from "@nestjs/common";
+import { Inject, Injectable, Logger } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import {
   BET_REPOSITORY,
@@ -38,7 +38,6 @@ export class CashOutBetUseCase {
   private readonly logger = new Logger(CashOutBetUseCase.name);
 
   constructor(
-    @Inject(forwardRef(() => GameRoundService))
     private readonly gameRoundService: GameRoundService,
     private readonly metrics: GameMetricsService,
     @Inject(BET_REPOSITORY)
