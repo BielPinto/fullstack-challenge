@@ -18,6 +18,7 @@ import {
   displayMultiplierMicroAtProgress,
   newServerSecret,
 } from "../../domain/services/provably-fair";
+import { roundToDomain } from "../mappers/game-domain.mapper";
 
 const DEFAULT_BETTING_WINDOW_MS = 10_000;
 const SETTLED_PAUSE_MS = 2_000;
@@ -213,43 +214,52 @@ export class GameRoundService {
     return round;
   }
 
-  private async startRunningPhase(round: RoundRecord): Promise<RoundRecord> {
-    const outcome = deriveCrashOutcome(round.serverSecret, round.clientSeed, round.nonce);
+  private async startRunningPhase(roundRecord: RoundRecord): Promise<RoundRecord> {
+    const round = roundToDomain(roundRecord);
+    const outcome = deriveCrashOutcome(
+      roundRecord.serverSecret,
+      roundRecord.clientSeed,
+      roundRecord.nonce,
+    );
     const runningStartedAt = new Date();
+    round.startRunning(outcome, runningStartedAt);
+    const updatedProps = round.toProps();
 
-    await this.rounds.updateRound(round.id, {
+    await this.rounds.updateRound(roundRecord.id, {
       phase: RoundPhase.RUNNING,
-      crashMultiplierMicro: outcome.crashMultiplierMicro,
-      runDurationMs: outcome.runDurationMs,
-      runningStartedAt,
+      crashMultiplierMicro: updatedProps.crashMultiplierMicro,
+      runDurationMs: updatedProps.runDurationMs,
+      runningStartedAt: updatedProps.runningStartedAt,
     });
 
-    const updated = await this.rounds.findById(round.id);
+    const updated = await this.rounds.findById(roundRecord.id);
     if (!updated) {
-      throw new Error(`Round ${round.id} missing after start`);
+      throw new Error(`Round ${roundRecord.id} missing after start`);
     }
 
     this.logger.log(
-      `Round ${round.id} running (crash micro=${outcome.crashMultiplierMicro}, duration=${outcome.runDurationMs}ms)`,
+      `Round ${roundRecord.id} running (crash micro=${outcome.crashMultiplierMicro}, duration=${outcome.runDurationMs}ms)`,
     );
     return updated;
   }
 
-  private async settleRound(round: RoundRecord): Promise<RoundRecord> {
-    const lostCount = await this.bets.markAllActiveBetsLost(round.id);
+  private async settleRound(roundRecord: RoundRecord): Promise<RoundRecord> {
+    const lostCount = await this.bets.markAllActiveBetsLost(roundRecord.id);
     const settledAt = new Date();
+    const round = roundToDomain(roundRecord);
+    round.settle(settledAt);
 
-    await this.rounds.updateRound(round.id, {
+    await this.rounds.updateRound(roundRecord.id, {
       phase: RoundPhase.SETTLED,
-      settledAt,
+      settledAt: round.getSettledAt(),
     });
 
-    const updated = await this.rounds.findById(round.id);
+    const updated = await this.rounds.findById(roundRecord.id);
     if (!updated) {
-      throw new Error(`Round ${round.id} missing after settle`);
+      throw new Error(`Round ${roundRecord.id} missing after settle`);
     }
 
-    this.logger.log(`Round ${round.id} settled (${lostCount} losing bets)`);
+    this.logger.log(`Round ${roundRecord.id} settled (${lostCount} losing bets)`);
     return updated;
   }
 }

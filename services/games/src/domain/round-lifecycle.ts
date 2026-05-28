@@ -1,30 +1,20 @@
-export type RoundPhase = "BETTING" | "RUNNING" | "SETTLED";
+export type { RoundPhase, RoundLifecycleEvent } from "./entities/round.entity";
+export { Round } from "./entities/round.entity";
 
-export type RoundLifecycleEvent =
-  | "BETTING_WINDOW_EXPIRED"
-  | "RUN_DURATION_ELAPSED";
-
-const VALID_TRANSITIONS: Record<
-  RoundPhase,
-  Partial<Record<RoundLifecycleEvent, RoundPhase>>
-> = {
-  BETTING: { BETTING_WINDOW_EXPIRED: "RUNNING" },
-  RUNNING: { RUN_DURATION_ELAPSED: "SETTLED" },
-  SETTLED: {},
-};
+import { Round, type RoundPhase, type RoundLifecycleEvent } from "./entities/round.entity";
 
 export function canTransition(
   phase: RoundPhase,
   event: RoundLifecycleEvent,
 ): boolean {
-  return VALID_TRANSITIONS[phase][event] !== undefined;
+  return Round.canTransition(phase, event);
 }
 
 export function nextPhase(
   phase: RoundPhase,
   event: RoundLifecycleEvent,
 ): RoundPhase | null {
-  return VALID_TRANSITIONS[phase][event] ?? null;
+  return Round.nextPhase(phase, event);
 }
 
 export function canAcceptBets(phase: RoundPhase): boolean {

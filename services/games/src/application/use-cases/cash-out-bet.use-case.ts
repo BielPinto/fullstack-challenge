@@ -1,5 +1,4 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { BetStatus, RoundPhase } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import {
   BET_REPOSITORY,
@@ -10,12 +9,15 @@ import { WALLET_GATEWAY, type WalletGatewayPort } from "../ports/wallet-gateway.
 import { GAME_EVENTS, type GameEventsPort } from "../ports/game-events.port";
 import { GameRoundService } from "../services/game-round.service";
 import {
+  betToDomain,
+  roundToDomain,
+} from "../mappers/game-domain.mapper";
+import {
   BetNotActiveError,
   BetNotFoundError,
   RoundNotRunningError,
   WalletOperationRejectedError,
 } from "../../domain/errors/game.errors";
-import { computeCashoutPayoutCents } from "../../domain/services/bet-payout";
 
 export type CashOutBetInput = {
   userId: string;
@@ -40,36 +42,27 @@ export class CashOutBetUseCase {
   ) {}
 
   async execute(input: CashOutBetInput): Promise<CashOutBetResult> {
-    const round = await this.gameRoundService.getActiveRound();
-    if (round.phase !== RoundPhase.RUNNING) {
-      throw new RoundNotRunningError();
-    }
+    const roundRecord = await this.gameRoundService.getActiveRound();
+    const round = roundToDomain(roundRecord);
+    round.assertRunning();
 
-    const userBet = await this.bets.findUserBetOnRound(input.userId, round.id);
-    if (!userBet) {
+    const userBetRecord = await this.bets.findUserBetOnRound(input.userId, roundRecord.id);
+    if (!userBetRecord) {
       throw new BetNotFoundError("No active bet for the current round");
     }
-    if (userBet.status === BetStatus.DEBIT_PENDING) {
-      throw new BetNotActiveError("Bet is still being confirmed");
-    }
-    if (userBet.status !== BetStatus.ACTIVE) {
-      throw new BetNotActiveError();
-    }
 
-    const activeBet = userBet;
+    const bet = betToDomain(userBetRecord);
+    bet.assertCanCashOut(round.getPhase());
 
-    const multiplierMicro = await this.gameRoundService.getCurrentMultiplierMicro(round);
+    const multiplierMicro = await this.gameRoundService.getCurrentMultiplierMicro(roundRecord);
     if (!multiplierMicro) {
       throw new RoundNotRunningError();
     }
 
-    const payoutInCents = computeCashoutPayoutCents(
-      activeBet.amountInCents,
-      multiplierMicro,
-    );
+    const { payoutInCents } = bet.calculateCashout(multiplierMicro);
 
     const cashedOut = await this.bets.markCashedOut({
-      betId: activeBet.id,
+      betId: bet.id,
       cashoutMultiplierMicro: multiplierMicro,
       payoutInCents,
     });
@@ -80,18 +73,18 @@ export class CashOutBetUseCase {
     const credit = await this.walletGateway.requestCredit({
       commandId: randomUUID(),
       userId: input.userId,
-      gameRoundId: round.id,
-      betId: activeBet.id,
+      gameRoundId: roundRecord.id,
+      betId: bet.id,
       amountInCents: payoutInCents,
       reason: "cashout",
     });
 
     if (!credit.ok) {
-      await this.bets.revertCashout(activeBet.id);
+      await this.bets.revertCashout(bet.id);
       throw new WalletOperationRejectedError(credit.reason);
     }
 
-    const updated = await this.bets.findById(activeBet.id);
+    const updated = await this.bets.findById(bet.id);
     if (!updated) {
       throw new Error("Bet missing after cashout");
     }

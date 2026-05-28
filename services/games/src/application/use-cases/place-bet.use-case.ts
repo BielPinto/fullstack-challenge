@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { RoundPhase } from "@prisma/client";
 import { Prisma } from "@prisma/client";
 import { randomUUID } from "node:crypto";
+import { Bet } from "../../domain/entities/bet.entity";
 import {
   BET_REPOSITORY,
   type BetRecord,
@@ -10,13 +10,12 @@ import {
 import { WALLET_GATEWAY, type WalletGatewayPort } from "../ports/wallet-gateway.port";
 import { GAME_EVENTS, type GameEventsPort } from "../ports/game-events.port";
 import { GameRoundService } from "../services/game-round.service";
+import { roundToDomain } from "../mappers/game-domain.mapper";
 import {
   DuplicateBetError,
-  RoundNotInBettingPhaseError,
   WalletOperationRejectedError,
   WalletOperationTimeoutError,
 } from "../../domain/errors/game.errors";
-import { assertBetAmountInRange } from "../../domain/value-objects/bet-limits";
 
 export type PlaceBetInput = {
   userId: string;
@@ -41,21 +40,25 @@ export class PlaceBetUseCase {
   ) {}
 
   async execute(input: PlaceBetInput): Promise<PlaceBetResult> {
-    assertBetAmountInRange(input.amountInCents);
-
-    const round = await this.gameRoundService.getActiveRound();
-    if (round.phase !== RoundPhase.BETTING) {
-      throw new RoundNotInBettingPhaseError();
-    }
+    const roundRecord = await this.gameRoundService.getActiveRound();
+    roundToDomain(roundRecord).assertAcceptsBets();
 
     const betId = randomUUID();
     const debitCommandId = randomUUID();
+
+    Bet.createDebitPending({
+      id: betId,
+      roundId: roundRecord.id,
+      userId: input.userId,
+      amountInCents: input.amountInCents,
+      debitCommandId,
+    });
 
     let bet: BetRecord;
     try {
       bet = await this.bets.createBetDebitPending({
         id: betId,
-        roundId: round.id,
+        roundId: roundRecord.id,
         userId: input.userId,
         amountInCents: input.amountInCents,
         debitCommandId,
@@ -74,7 +77,7 @@ export class PlaceBetUseCase {
       const debit = await this.walletGateway.requestDebit({
         commandId: debitCommandId,
         userId: input.userId,
-        gameRoundId: round.id,
+        gameRoundId: roundRecord.id,
         betId,
         amountInCents: input.amountInCents,
       });
@@ -92,7 +95,7 @@ export class PlaceBetUseCase {
 
       this.events.broadcastBetPlaced(activeBet);
 
-      return { bet: activeBet, roundId: round.id };
+      return { bet: activeBet, roundId: roundRecord.id };
     } catch (error) {
       if (
         error instanceof WalletOperationRejectedError ||
