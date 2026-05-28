@@ -25,6 +25,14 @@ plugins:
         - Origin
         - X-Requested-With
       max_age: 3600
+  - name: rate-limiting
+    config:
+      policy: local
+      limit_by: ip
+      second: 30
+      minute: 600
+      fault_tolerant: true
+      hide_client_headers: false
 
 services:
   - name: games-service
