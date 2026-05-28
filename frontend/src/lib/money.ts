@@ -1,7 +1,6 @@
 const MIN_CENTS = 100n;
 const MAX_CENTS = 100_000n;
 
-/** Parse user-facing BRL input (e.g. "10,50" / "10.50") to centavos as bigint. */
 export function parseBrlToCents(input: string): { ok: true; cents: bigint } | { ok: false; error: string } {
   const trimmed = input.trim().replace(/\s/g, "");
   if (!trimmed) {

@@ -66,9 +66,9 @@ export class SocketGameEventsPublisher implements GameEventsPort {
     );
   }
 
-  private emitTimed(event: string, fn: () => void): void {
+  private emitTimed(event: string, emit: () => void): void {
     const start = performance.now();
-    fn();
+    emit();
     this.metrics.observeWsBroadcast(event, performance.now() - start);
   }
 }

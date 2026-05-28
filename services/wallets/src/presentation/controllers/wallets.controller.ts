@@ -38,7 +38,6 @@ export class WalletsController {
     return { status: "ok", service: "wallets" };
   }
 
-  /** Kong strips `/wallets` → `POST /`; direct access uses `POST /wallets`. */
   @Post(["wallets", ""])
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth("jwt")
@@ -58,7 +57,6 @@ export class WalletsController {
     }
   }
 
-  /** Kong strips `/wallets` → `GET /me`; direct access uses `GET /wallets/me`. */
   @Get(["wallets/me", "me"])
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth("jwt")

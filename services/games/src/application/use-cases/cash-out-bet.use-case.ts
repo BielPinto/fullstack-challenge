@@ -22,7 +22,6 @@ import {
 
 export type CashOutBetInput = {
   userId: string;
-  /** When set (e.g. auto cashout), cash out at this multiplier instead of the live tick. */
   multiplierMicro?: bigint;
   source?: "manual" | "auto";
 };

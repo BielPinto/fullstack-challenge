@@ -71,9 +71,7 @@ export async function waitForKeycloak(attempts = 30): Promise<void> {
       if (res.ok) {
         return;
       }
-    } catch {
-      // retry
-    }
+    } catch {}
     await Bun.sleep(2000);
   }
   throw new Error(`Keycloak not ready: ${realmUrl}`);
@@ -86,9 +84,7 @@ export async function waitForService(url: string, attempts = 30): Promise<void> 
       if (res.ok) {
         return;
       }
-    } catch {
-      // retry
-    }
+    } catch {}
     await Bun.sleep(2000);
   }
   throw new Error(`Service not ready: ${url}`);
@@ -116,7 +112,6 @@ export async function connectRabbit(): Promise<{ connection: ChannelModel; chann
   return { connection, channel };
 }
 
-/** Top up player balance when game activity or prior runs drained the wallet. */
 export async function ensurePlayerBalance(
   token: string,
   targetCents: bigint = SEED_BALANCE_CENTS,

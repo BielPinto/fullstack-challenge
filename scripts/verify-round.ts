@@ -1,13 +1,4 @@
 #!/usr/bin/env bun
-/**
- * Offline provably-fair verification for a settled round.
- *
- *   bun scripts/verify-round.ts <roundId>
- *   bun scripts/verify-round.ts --api http://localhost:8000 <roundId>
- *   bun scripts/verify-round.ts --server-secret ... --commit-hash ... ...
- *
- * Uses the same pure functions as the Game service domain layer.
- */
 
 import {
   commitServerSecret,
@@ -32,9 +23,7 @@ type VerifyInput = {
   commitHash: string;
   clientSeed: string;
   nonce: string;
-  /** Exact micro-units (manual audits with DB values). */
   crashMultiplierMicro?: bigint;
-  /** Display form from API, e.g. "2.45" (two decimal places). */
   crashMultiplierDisplay?: string;
   runDurationMs: number;
 };

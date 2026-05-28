@@ -1,4 +1,3 @@
-/** Socket.IO event names (server → client only). */
 export const GAME_WS_EVENTS = {
   ROUND_STATE: "round:state",
   ROUND_PHASE: "round:phase",
@@ -17,7 +16,6 @@ export type WsBetPayloadV1 = {
   status: string;
   cashoutMultiplier: string | null;
   payout: string | null;
-  /** Target multiplier for server-side auto cashout (optional). */
   autoCashoutMultiplier?: string | null;
 };
 

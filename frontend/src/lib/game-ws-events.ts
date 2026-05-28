@@ -1,4 +1,3 @@
-/** Mirrors @crash/contracts GAME_WS_EVENTS for the standalone browser bundle. */
 export const GAME_WS_EVENTS = {
   ROUND_STATE: "round:state",
   ROUND_PHASE: "round:phase",

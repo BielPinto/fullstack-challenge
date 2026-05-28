@@ -20,9 +20,7 @@ export default function LoginPage(): ReactElement {
           navigate("/", { replace: true });
         }
       })
-      .catch(() => {
-        /* unauthenticated */
-      });
+      .catch(() => undefined);
   }, [hydrated, navigate]);
 
   const login = (): void => {

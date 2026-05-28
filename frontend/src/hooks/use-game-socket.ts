@@ -26,7 +26,6 @@ export function useGameSocket(enabled: boolean): { connected: boolean } {
       return;
     }
     const socket: Socket = io(socketUrl(), {
-      // Polling first avoids "closed before established" when WS upgrade races with React cleanup.
       transports: ["polling", "websocket"],
       path: "/socket.io",
       reconnection: true,

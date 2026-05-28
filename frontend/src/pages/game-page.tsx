@@ -82,13 +82,13 @@ export default function GamePage(): ReactElement {
   });
 
   useEffect(() => {
-    const d = roundQuery.data;
-    if (!d) {
+    const roundDto = roundQuery.data;
+    if (!roundDto) {
       return;
     }
-    const cur = useGameRealtimeStore.getState().round;
-    if (!cur || cur.id !== d.id) {
-      applyRoundState(roundDtoToWsState(d));
+    const currentRound = useGameRealtimeStore.getState().round;
+    if (!currentRound || currentRound.id !== roundDto.id) {
+      applyRoundState(roundDtoToWsState(roundDto));
     }
   }, [roundQuery.data, applyRoundState]);
 

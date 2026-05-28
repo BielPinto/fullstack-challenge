@@ -15,7 +15,6 @@ export type SocketIoStack = {
   engine: EngineServer;
 };
 
-/** Mount Engine.IO on Express before Nest routes (Bun-compatible). */
 export function mountSocketIoOnExpress(expressApp: Express, httpServer: HttpServer): SocketIoStack {
   const corsOrigin = resolveWsCorsOrigin();
   const engine = new EngineServer({

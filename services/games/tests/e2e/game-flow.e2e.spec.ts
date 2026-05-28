@@ -121,7 +121,6 @@ describe("games e2e (docker:up)", () => {
     await waitForOpenBettingRound(token, { timeoutMs: 120_000 });
     let balanceBefore = await fetchBalanceCents(token);
 
-    // Must stay below MAX_BET so stake (balanceBefore + 1) is still a legal amount.
     let drains = 0;
     while (balanceBefore >= MAX_BET_CENTS && drains < 12) {
       await waitForOpenBettingRound(token, { timeoutMs: 120_000 });

@@ -71,7 +71,6 @@ export function debitFailed(
   };
 }
 
-/** Serializes wallet result events the same way the Wallet publisher does on the wire. */
 export function walletResultBuffer(
   event:
     | WalletDebitSucceededV1

@@ -67,9 +67,7 @@ export async function waitForKeycloak(attempts = 30): Promise<void> {
       if (res.ok) {
         return;
       }
-    } catch {
-      // retry
-    }
+    } catch {}
     await Bun.sleep(2000);
   }
   throw new Error(`Keycloak not ready: ${realmUrl}`);
@@ -82,9 +80,7 @@ export async function waitForService(url: string, attempts = 30): Promise<void> 
       if (res.ok) {
         return;
       }
-    } catch {
-      // retry
-    }
+    } catch {}
     await Bun.sleep(2000);
   }
   throw new Error(`Service not ready: ${url}`);
@@ -117,7 +113,6 @@ export function playerHasBetOnRound(round: RoundView): boolean {
   );
 }
 
-/** Waits until the active round is in BETTING and the player has no bet on it. */
 export async function waitForOpenBettingRound(
   token: string,
   options: { timeoutMs?: number; baseUrl?: string } = {},
@@ -140,7 +135,6 @@ export async function waitForOpenBettingRound(
   throw new Error("Timed out waiting for open betting round");
 }
 
-/** Waits until the given round is no longer active (settled or replaced by a new round). */
 export async function waitForRoundToEnd(
   roundId: string,
   options: { timeoutMs?: number; baseUrl?: string } = {},

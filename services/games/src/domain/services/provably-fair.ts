@@ -1,7 +1,6 @@
 import { createHash, createHmac, randomBytes } from "node:crypto";
 
 const TWO_POW32 = 2n ** 32n;
-/** 1000x cap (integer micro units, 10^6 = 1x). */
 export const MAX_CRASH_MULTIPLIER_MICRO = 1_000_000_000n;
 export const MICRO_UNIT = 1_000_000n;
 
@@ -18,7 +17,6 @@ export function commitServerSecret(serverSecret: string): string {
   return createHash("sha256").update(serverSecret, "utf8").digest("hex");
 }
 
-/** Deterministic outcome from disclosed server secret + public seeds (verifiable offline). */
 export function deriveCrashOutcome(
   serverSecret: string,
   clientSeed: string,
@@ -28,13 +26,13 @@ export function deriveCrashOutcome(
     .update(`${clientSeed}:${nonce}`)
     .digest();
 
-  const h = digest.readUInt32BE(0);
-  const hh = BigInt(h);
+  const firstHashWord = digest.readUInt32BE(0);
+  const firstHash = BigInt(firstHashWord);
 
-  // Classic crash-style mapping: multiplier = ((100·2³² − h) / (100·(2³² − h))), using BigInt rationals only.
-  const num = 100n * TWO_POW32 - hh;
-  const den = 100n * (TWO_POW32 - hh);
-  let crashMultiplierMicro = (num * MICRO_UNIT) / den;
+  // Crash multiplier from HMAC digest (see PROVABLY_FAIR.md).
+  const numerator = 100n * TWO_POW32 - firstHash;
+  const denominator = 100n * (TWO_POW32 - firstHash);
+  let crashMultiplierMicro = (numerator * MICRO_UNIT) / denominator;
 
   if (crashMultiplierMicro < MICRO_UNIT) {
     crashMultiplierMicro = MICRO_UNIT;
@@ -43,10 +41,10 @@ export function deriveCrashOutcome(
     crashMultiplierMicro = MAX_CRASH_MULTIPLIER_MICRO;
   }
 
-  const h2 = digest.readUInt32BE(4);
+  const durationSeed = digest.readUInt32BE(4);
   const minMs = 5_000;
   const maxMs = 45_000;
-  const runDurationMs = minMs + (h2 % (maxMs - minMs + 1));
+  const runDurationMs = minMs + (durationSeed % (maxMs - minMs + 1));
 
   return { crashMultiplierMicro, runDurationMs };
 }

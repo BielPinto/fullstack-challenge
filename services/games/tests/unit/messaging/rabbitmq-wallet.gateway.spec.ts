@@ -32,7 +32,6 @@ function createMockChannel(): Channel {
   } as unknown as Channel;
 }
 
-/** Flushes microtasks so async ensureChannel + publish run before assertions. */
 async function flushAsync(): Promise<void> {
   await Promise.resolve();
 }

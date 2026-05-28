@@ -270,7 +270,6 @@ export class GameRoundService {
     return updated;
   }
 
-  /** Lazy resolve to avoid circular import with CashOutBetUseCase at module load (Bun). */
   private async processAutoCashouts(
     roundId: string,
     currentMultiplierMicro: bigint,
