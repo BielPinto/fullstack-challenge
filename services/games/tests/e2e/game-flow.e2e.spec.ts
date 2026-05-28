@@ -3,6 +3,8 @@ import {
   ensurePlayerBalance,
   SEED_BALANCE_CENTS,
 } from "../../../wallets/tests/e2e/helpers";
+import { formatMultiplierMicro } from "../../src/common/format";
+import { deriveCrashOutcome } from "../../src/domain/services/provably-fair";
 import {
   cashOut,
   fetchBalanceCents,
@@ -12,6 +14,7 @@ import {
   getPlayerToken,
   KONG_BASE_URL,
   placeBet,
+  verifyRound,
   waitForKeycloak,
   waitForOpenBettingRound,
   waitForRoundPhase,
@@ -173,4 +176,35 @@ describe("games e2e (docker:up)", () => {
     const balanceAfter = await fetchBalanceCents(token);
     expect(balanceAfter).toBe(afterBet);
   }, 150_000);
+
+  it("settled round GET /verify via Kong returns verified=true", async () => {
+    await waitForOpenBettingRound(token, { timeoutMs: 120_000 });
+
+    const placed = await placeBet(token, SMALL_BET_CENTS);
+    expectCreated(placed.status);
+    if (!("roundId" in placed.body)) {
+      throw new Error(`Unexpected place bet body: ${JSON.stringify(placed.body)}`);
+    }
+    const roundId = placed.body.roundId;
+
+    await waitForRoundPhase("RUNNING", { timeoutMs: 60_000 });
+    await waitForRoundToEnd(roundId, { timeoutMs: 150_000 });
+
+    const verify = await verifyRound(roundId);
+    expect(verify.roundId).toBe(roundId);
+    expect(verify.verified).toBe(true);
+    expect(verify.serverSecret).toBeTruthy();
+    expect(verify.crashMultiplier).toBeTruthy();
+    expect(verify.runDurationMs).not.toBeNull();
+
+    const derived = deriveCrashOutcome(
+      verify.serverSecret!,
+      verify.clientSeed,
+      verify.nonce,
+    );
+    expect(formatMultiplierMicro(derived.crashMultiplierMicro)).toBe(
+      verify.crashMultiplier,
+    );
+    expect(derived.runDurationMs).toBe(verify.runDurationMs);
+  }, 180_000);
 });

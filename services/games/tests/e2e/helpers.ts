@@ -26,6 +26,17 @@ export type BetActionResponse = {
   payout?: string;
 };
 
+export type VerifyRoundResponse = {
+  roundId: string;
+  commitHash: string;
+  serverSecret: string | null;
+  clientSeed: string;
+  nonce: string;
+  crashMultiplier: string | null;
+  runDurationMs: number | null;
+  verified: boolean;
+};
+
 export async function getPlayerToken(): Promise<string> {
   const body = new URLSearchParams({
     client_id: "crash-game-client",
@@ -195,6 +206,19 @@ export async function cashOut(
   });
   const body = (await res.json()) as BetActionResponse | { message: string };
   return { status: res.status, body };
+}
+
+export async function verifyRound(
+  roundId: string,
+  baseUrl = `${KONG_BASE_URL}/games`,
+): Promise<VerifyRoundResponse> {
+  const res = await fetch(`${baseUrl}/rounds/${roundId}/verify`);
+  if (!res.ok) {
+    throw new Error(
+      `GET rounds/${roundId}/verify failed: ${res.status} ${await res.text()}`,
+    );
+  }
+  return (await res.json()) as VerifyRoundResponse;
 }
 
 export async function getMyBets(
