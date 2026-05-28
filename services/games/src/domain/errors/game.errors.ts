@@ -35,6 +35,15 @@ export class BetAmountOutOfRangeError extends Error {
   }
 }
 
+export class AutoCashoutMultiplierOutOfRangeError extends Error {
+  constructor(
+    message = "Auto cashout multiplier must be between 1.01x and 1000.00x",
+  ) {
+    super(message);
+    this.name = "AutoCashoutMultiplierOutOfRangeError";
+  }
+}
+
 export class DuplicateBetError extends Error {
   constructor(message = "Player already has a bet in this round") {
     super(message);

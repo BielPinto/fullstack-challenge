@@ -25,10 +25,19 @@ export type BetRecord = {
   status: BetStatus;
   cashoutMultiplierMicro: bigint | null;
   payoutInCents: bigint | null;
+  autoCashoutMultiplierMicro: bigint | null;
   debitCommandId: string;
   createdAt: Date;
   updatedAt: Date;
 };
+
+export type LeaderboardEntry = {
+  userId: string;
+  profitInCents: bigint;
+  betCount: number;
+};
+
+export type LeaderboardPeriod = "24h" | "7d";
 
 export const ROUND_REPOSITORY = Symbol("ROUND_REPOSITORY");
 
@@ -61,6 +70,7 @@ export type BetRepositoryPort = {
     userId: string;
     amountInCents: bigint;
     debitCommandId: string;
+    autoCashoutMultiplierMicro?: bigint | null;
   }): Promise<BetRecord>;
   deleteBet(id: string): Promise<void>;
   markDebitSucceeded(debitCommandId: string): Promise<void>;
@@ -76,4 +86,12 @@ export type BetRepositoryPort = {
   markAllActiveBetsLost(roundId: string): Promise<number>;
   listMyBets(userId: string, skip: number, take: number): Promise<BetRecord[]>;
   listPublicBetsForRound(roundId: string): Promise<BetRecord[]>;
+  listActiveBetsDueForAutoCashout(
+    roundId: string,
+    currentMultiplierMicro: bigint,
+  ): Promise<BetRecord[]>;
+  getLeaderboard(
+    period: LeaderboardPeriod,
+    limit: number,
+  ): Promise<LeaderboardEntry[]>;
 };

@@ -8,6 +8,7 @@ import { getUserManager } from "@/auth/user-manager";
 import { BetsFeed } from "@/components/bets-feed";
 import { CrashMultiplierChart } from "@/components/crash-multiplier-chart";
 import { GameShell } from "@/components/game-shell";
+import { LeaderboardPanel } from "@/components/leaderboard-panel";
 import { RoundHistoryBar } from "@/components/round-history-bar";
 import { RoundVerifyDialog } from "@/components/round-verify-dialog";
 import { Button } from "@/components/ui/button";
@@ -110,6 +111,8 @@ export default function GamePage(): ReactElement {
   const potentialPayout = stakeNumber > 0 && phase === "RUNNING" ? stakeNumber * currentMult : null;
 
   const [stakeInput, setStakeInput] = useState("10");
+  const [autoCashoutEnabled, setAutoCashoutEnabled] = useState(false);
+  const [autoCashoutInput, setAutoCashoutInput] = useState("2.00");
   const [verifyRoundId, setVerifyRoundId] = useState<string | null>(null);
 
   const betMutation = useMutation({
@@ -118,7 +121,9 @@ export default function GamePage(): ReactElement {
       if (!parsed.ok) {
         throw new Error(parsed.error);
       }
-      return gamesApi.placeBet(parsed.cents.toString(), token!);
+      const autoTarget =
+        autoCashoutEnabled && autoCashoutInput.trim() ? autoCashoutInput.trim() : undefined;
+      return gamesApi.placeBet(parsed.cents.toString(), token!, autoTarget);
     },
     onSuccess: () => {
       toast.success("Aposta registrada");
@@ -213,6 +218,28 @@ export default function GamePage(): ReactElement {
             <CardDescription>Aposte na fase de apostas; saque durante a subida.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="flex items-center gap-2">
+              <input
+                id="auto-cashout"
+                type="checkbox"
+                checked={autoCashoutEnabled}
+                onChange={(e) => setAutoCashoutEnabled(e.target.checked)}
+                disabled={phase !== "BETTING"}
+                className="rounded border-white/20"
+              />
+              <label htmlFor="auto-cashout" className="text-xs font-medium text-zinc-400">
+                Auto cashout em
+              </label>
+              <Input
+                inputMode="decimal"
+                value={autoCashoutInput}
+                onChange={(e) => setAutoCashoutInput(e.target.value)}
+                disabled={!autoCashoutEnabled || phase !== "BETTING"}
+                className="h-8 w-20 px-2 text-sm"
+                aria-label="Multiplicador alvo"
+              />
+              <span className="text-xs text-zinc-500">×</span>
+            </div>
             <div>
               <label htmlFor="stake" className="mb-1 block text-xs font-medium text-zinc-400">
                 Valor (R$)
@@ -267,6 +294,8 @@ export default function GamePage(): ReactElement {
             <BetsFeed bets={round?.bets ?? []} myUserId={accessSub} />
           </CardContent>
         </Card>
+
+        <LeaderboardPanel myUserId={accessSub} />
 
         <Card>
           <CardHeader>

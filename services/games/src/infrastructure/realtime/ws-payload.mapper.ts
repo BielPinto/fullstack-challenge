@@ -19,6 +19,9 @@ export function toWsBetPayload(bet: BetRecord): WsBetPayloadV1 {
       ? formatMultiplierMicro(bet.cashoutMultiplierMicro)
       : null,
     payout: bet.payoutInCents ? formatCents(bet.payoutInCents) : null,
+    autoCashoutMultiplier: bet.autoCashoutMultiplierMicro
+      ? formatMultiplierMicro(bet.autoCashoutMultiplierMicro)
+      : null,
   };
 }
 

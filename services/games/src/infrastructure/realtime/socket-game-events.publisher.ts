@@ -1,5 +1,6 @@
 import { GAME_WS_EVENTS } from "@crash/contracts";
 import { Injectable } from "@nestjs/common";
+import { GameMetricsService } from "../observability/game-metrics.service";
 import type { Server } from "socket.io";
 import type {
   GameEventsPort,
@@ -18,16 +19,22 @@ import {
 export class SocketGameEventsPublisher implements GameEventsPort {
   private server: Server | null = null;
 
+  constructor(private readonly metrics: GameMetricsService) {}
+
   attachServer(server: Server): void {
     this.server = server;
   }
 
   broadcastRoundState(payload: RoundStateBroadcast): void {
-    this.server?.emit(GAME_WS_EVENTS.ROUND_STATE, toWsRoundStatePayload(payload));
+    this.emitTimed(GAME_WS_EVENTS.ROUND_STATE, () =>
+      this.server?.emit(GAME_WS_EVENTS.ROUND_STATE, toWsRoundStatePayload(payload)),
+    );
   }
 
   broadcastRoundPhase(round: RoundRecord): void {
-    this.server?.emit(GAME_WS_EVENTS.ROUND_PHASE, toWsRoundPhasePayload(round));
+    this.emitTimed(GAME_WS_EVENTS.ROUND_PHASE, () =>
+      this.server?.emit(GAME_WS_EVENTS.ROUND_PHASE, toWsRoundPhasePayload(round)),
+    );
   }
 
   broadcastRoundTick(input: {
@@ -36,18 +43,32 @@ export class SocketGameEventsPublisher implements GameEventsPort {
     elapsedMs: number;
     runDurationMs: number;
   }): void {
-    this.server?.emit(GAME_WS_EVENTS.ROUND_TICK, toWsRoundTickPayload(input));
+    this.emitTimed(GAME_WS_EVENTS.ROUND_TICK, () =>
+      this.server?.emit(GAME_WS_EVENTS.ROUND_TICK, toWsRoundTickPayload(input)),
+    );
   }
 
   broadcastRoundCrashed(round: RoundRecord): void {
-    this.server?.emit(GAME_WS_EVENTS.ROUND_CRASHED, toWsRoundCrashedPayload(round));
+    this.emitTimed(GAME_WS_EVENTS.ROUND_CRASHED, () =>
+      this.server?.emit(GAME_WS_EVENTS.ROUND_CRASHED, toWsRoundCrashedPayload(round)),
+    );
   }
 
   broadcastBetPlaced(bet: BetRecord): void {
-    this.server?.emit(GAME_WS_EVENTS.BET_PLACED, toWsBetPayload(bet));
+    this.emitTimed(GAME_WS_EVENTS.BET_PLACED, () =>
+      this.server?.emit(GAME_WS_EVENTS.BET_PLACED, toWsBetPayload(bet)),
+    );
   }
 
   broadcastBetCashedOut(bet: BetRecord): void {
-    this.server?.emit(GAME_WS_EVENTS.BET_CASHED_OUT, toWsBetPayload(bet));
+    this.emitTimed(GAME_WS_EVENTS.BET_CASHED_OUT, () =>
+      this.server?.emit(GAME_WS_EVENTS.BET_CASHED_OUT, toWsBetPayload(bet)),
+    );
+  }
+
+  private emitTimed(event: string, fn: () => void): void {
+    const start = performance.now();
+    fn();
+    this.metrics.observeWsBroadcast(event, performance.now() - start);
   }
 }

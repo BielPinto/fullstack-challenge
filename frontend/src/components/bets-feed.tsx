@@ -66,7 +66,9 @@ export function BetsFeed({ bets, myUserId }: Props): ReactElement {
                 >
                   {b.status === "CASHED_OUT" && b.cashoutMultiplier
                     ? `Saque ${b.cashoutMultiplier}×`
-                    : b.status}
+                    : b.status === "ACTIVE" && b.autoCashoutMultiplier
+                      ? `Auto @ ${b.autoCashoutMultiplier}×`
+                      : b.status}
                 </span>
               </p>
             </div>

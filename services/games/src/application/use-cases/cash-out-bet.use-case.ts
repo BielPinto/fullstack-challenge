@@ -1,4 +1,4 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, Logger, forwardRef } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import {
   BET_REPOSITORY,
@@ -7,6 +7,7 @@ import {
 } from "../ports/game.persistence";
 import { WALLET_GATEWAY, type WalletGatewayPort } from "../ports/wallet-gateway.port";
 import { GAME_EVENTS, type GameEventsPort } from "../ports/game-events.port";
+import { GameMetricsService } from "../../infrastructure/observability/game-metrics.service";
 import { GameRoundService } from "../services/game-round.service";
 import {
   betToDomain,
@@ -21,6 +22,9 @@ import {
 
 export type CashOutBetInput = {
   userId: string;
+  /** When set (e.g. auto cashout), cash out at this multiplier instead of the live tick. */
+  multiplierMicro?: bigint;
+  source?: "manual" | "auto";
 };
 
 export type CashOutBetResult = {
@@ -31,8 +35,12 @@ export type CashOutBetResult = {
 
 @Injectable()
 export class CashOutBetUseCase {
+  private readonly logger = new Logger(CashOutBetUseCase.name);
+
   constructor(
+    @Inject(forwardRef(() => GameRoundService))
     private readonly gameRoundService: GameRoundService,
+    private readonly metrics: GameMetricsService,
     @Inject(BET_REPOSITORY)
     private readonly bets: BetRepositoryPort,
     @Inject(WALLET_GATEWAY)
@@ -54,7 +62,9 @@ export class CashOutBetUseCase {
     const bet = betToDomain(userBetRecord);
     bet.assertCanCashOut(round.getPhase());
 
-    const multiplierMicro = await this.gameRoundService.getCurrentMultiplierMicro(roundRecord);
+    const multiplierMicro =
+      input.multiplierMicro ??
+      (await this.gameRoundService.getCurrentMultiplierMicro(roundRecord));
     if (!multiplierMicro) {
       throw new RoundNotRunningError();
     }
@@ -90,11 +100,45 @@ export class CashOutBetUseCase {
     }
 
     this.events.broadcastBetCashedOut(updated);
+    this.metrics.recordCashout(payoutInCents, input.source === "auto");
 
     return {
       bet: updated,
       payoutInCents,
       multiplierMicro,
     };
+  }
+
+  async processAutoCashoutsForRound(
+    roundId: string,
+    currentMultiplierMicro: bigint,
+  ): Promise<void> {
+    const due = await this.bets.listActiveBetsDueForAutoCashout(
+      roundId,
+      currentMultiplierMicro,
+    );
+
+    for (const bet of due) {
+      if (!bet.autoCashoutMultiplierMicro) {
+        continue;
+      }
+      try {
+        await this.execute({
+          userId: bet.userId,
+          multiplierMicro: bet.autoCashoutMultiplierMicro,
+          source: "auto",
+        });
+      } catch (error) {
+        if (
+          error instanceof BetNotActiveError ||
+          error instanceof BetNotFoundError
+        ) {
+          continue;
+        }
+        this.logger.warn(
+          `Auto cashout failed for bet ${bet.id}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
   }
 }

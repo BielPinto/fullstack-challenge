@@ -25,11 +25,17 @@ import {
 } from "@nestjs/swagger";
 import { CashOutBetUseCase } from "../../application/use-cases/cash-out-bet.use-case";
 import { GetCurrentRoundUseCase } from "../../application/use-cases/get-current-round.use-case";
+import { GetLeaderboardUseCase } from "../../application/use-cases/get-leaderboard.use-case";
 import { GetMyBetsUseCase } from "../../application/use-cases/get-my-bets.use-case";
 import { GetRoundHistoryUseCase } from "../../application/use-cases/get-round-history.use-case";
 import { PlaceBetUseCase } from "../../application/use-cases/place-bet.use-case";
 import { VerifyRoundUseCase } from "../../application/use-cases/verify-round.use-case";
 import {
+  assertAutoCashoutMultiplierInRange,
+  parseMultiplierStringToMicro,
+} from "../../domain/value-objects/auto-cashout";
+import {
+  AutoCashoutMultiplierOutOfRangeError,
   BetAmountOutOfRangeError,
   BetNotActiveError,
   BetNotFoundError,
@@ -52,6 +58,10 @@ import {
 } from "../dtos/bet.dto";
 import { HealthCheckResponseDto } from "../dtos/health-check-response.dto";
 import {
+  LeaderboardResponseDto,
+  toLeaderboardResponse,
+} from "../dtos/leaderboard.dto";
+import {
   RoundHistoryResponseDto,
   RoundViewDto,
   toRoundHistoryItemDto,
@@ -70,6 +80,7 @@ export class GamesController {
     private readonly getMyBets: GetMyBetsUseCase,
     private readonly placeBet: PlaceBetUseCase,
     private readonly cashOutBet: CashOutBetUseCase,
+    private readonly getLeaderboard: GetLeaderboardUseCase,
   ) {}
 
   @Get("health")
@@ -130,6 +141,23 @@ export class GamesController {
     }
   }
 
+  @Get(["games/leaderboard", "leaderboard"])
+  @ApiOperation({ summary: "Top players by net profit (24h or 7d)" })
+  @ApiQuery({ name: "period", required: false, enum: ["24h", "7d"] })
+  @ApiQuery({ name: "limit", required: false, type: Number })
+  @ApiOkResponse({ type: LeaderboardResponseDto })
+  async leaderboard(
+    @Query("period") period?: string,
+    @Query("limit") limit?: string,
+  ): Promise<LeaderboardResponseDto> {
+    const resolvedPeriod = period === "7d" ? "7d" : "24h";
+    const result = await this.getLeaderboard.execute({
+      period: resolvedPeriod,
+      limit: limit ? Number(limit) : 10,
+    });
+    return toLeaderboardResponse(result.period, result.items);
+  }
+
   @Get(["games/bets/me", "bets/me"])
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth("jwt")
@@ -170,10 +198,30 @@ export class GamesController {
       throw new BadRequestException("amountInCents must be an integer string");
     }
 
+    let autoCashoutMultiplierMicro: bigint | null = null;
+    if (body.autoCashoutMultiplier?.trim()) {
+      const parsed = parseMultiplierStringToMicro(body.autoCashoutMultiplier);
+      if (!parsed) {
+        throw new BadRequestException(
+          "autoCashoutMultiplier must be a decimal like 2.00",
+        );
+      }
+      try {
+        assertAutoCashoutMultiplierInRange(parsed);
+      } catch (error) {
+        if (error instanceof AutoCashoutMultiplierOutOfRangeError) {
+          throw new BadRequestException(error.message);
+        }
+        throw error;
+      }
+      autoCashoutMultiplierMicro = parsed;
+    }
+
     try {
       const result = await this.placeBet.execute({
         userId: user.sub,
         amountInCents,
+        autoCashoutMultiplierMicro,
       });
       return toBetActionResponse(result.bet);
     } catch (error) {

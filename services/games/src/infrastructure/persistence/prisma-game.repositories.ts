@@ -3,6 +3,8 @@ import type {
   BetRecord,
   BetRepositoryPort,
   CreateRoundInput,
+  LeaderboardEntry,
+  LeaderboardPeriod,
   RoundRecord,
   RoundRepositoryPort,
 } from "../../application/ports/game.persistence";
@@ -34,11 +36,17 @@ function mapBet(row: {
   status: BetStatus;
   cashoutMultiplierMicro: bigint | null;
   payoutInCents: bigint | null;
+  autoCashoutMultiplierMicro: bigint | null;
   debitCommandId: string;
   createdAt: Date;
   updatedAt: Date;
 }): BetRecord {
   return { ...row };
+}
+
+function leaderboardSince(period: LeaderboardPeriod): Date {
+  const hours = period === "24h" ? 24 : 24 * 7;
+  return new Date(Date.now() - hours * 60 * 60 * 1000);
 }
 
 @Injectable()
@@ -131,6 +139,7 @@ export class PrismaBetRepository implements BetRepositoryPort {
     userId: string;
     amountInCents: bigint;
     debitCommandId: string;
+    autoCashoutMultiplierMicro?: bigint | null;
   }): Promise<BetRecord> {
     const row = await this.prisma.bet.create({
       data: {
@@ -139,6 +148,7 @@ export class PrismaBetRepository implements BetRepositoryPort {
         userId: input.userId,
         amountInCents: input.amountInCents,
         debitCommandId: input.debitCommandId,
+        autoCashoutMultiplierMicro: input.autoCashoutMultiplierMicro ?? null,
         status: BetStatus.DEBIT_PENDING,
       },
     });
@@ -230,5 +240,59 @@ export class PrismaBetRepository implements BetRepositoryPort {
       orderBy: { createdAt: "asc" },
     });
     return rows.map(mapBet);
+  }
+
+  async listActiveBetsDueForAutoCashout(
+    roundId: string,
+    currentMultiplierMicro: bigint,
+  ): Promise<BetRecord[]> {
+    const rows = await this.prisma.bet.findMany({
+      where: {
+        roundId,
+        status: BetStatus.ACTIVE,
+        autoCashoutMultiplierMicro: { lte: currentMultiplierMicro, not: null },
+      },
+      orderBy: { autoCashoutMultiplierMicro: "asc" },
+    });
+    return rows.map(mapBet);
+  }
+
+  async getLeaderboard(period: LeaderboardPeriod, limit: number): Promise<LeaderboardEntry[]> {
+    const since = leaderboardSince(period);
+    const rows = await this.prisma.$queryRaw<
+      Array<{ user_id: string; profit_cents: bigint; bet_count: bigint }>
+    >`
+      SELECT
+        user_id,
+        SUM(
+          CASE
+            WHEN status = 'CASHED_OUT' AND payout_in_cents IS NOT NULL
+              THEN payout_in_cents - amount_in_cents
+            WHEN status = 'LOST' THEN -amount_in_cents
+            ELSE 0
+          END
+        ) AS profit_cents,
+        COUNT(*)::bigint AS bet_count
+      FROM bets
+      WHERE status IN ('CASHED_OUT', 'LOST')
+        AND updated_at >= ${since}
+      GROUP BY user_id
+      HAVING SUM(
+        CASE
+          WHEN status = 'CASHED_OUT' AND payout_in_cents IS NOT NULL
+            THEN payout_in_cents - amount_in_cents
+          WHEN status = 'LOST' THEN -amount_in_cents
+          ELSE 0
+        END
+      ) > 0
+      ORDER BY profit_cents DESC
+      LIMIT ${limit}
+    `;
+
+    return rows.map((row) => ({
+      userId: row.user_id,
+      profitInCents: row.profit_cents,
+      betCount: Number(row.bet_count),
+    }));
   }
 }

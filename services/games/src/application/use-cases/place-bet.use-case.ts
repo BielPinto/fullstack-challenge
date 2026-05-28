@@ -9,6 +9,7 @@ import {
 } from "../ports/game.persistence";
 import { WALLET_GATEWAY, type WalletGatewayPort } from "../ports/wallet-gateway.port";
 import { GAME_EVENTS, type GameEventsPort } from "../ports/game-events.port";
+import { GameMetricsService } from "../../infrastructure/observability/game-metrics.service";
 import { GameRoundService } from "../services/game-round.service";
 import { roundToDomain } from "../mappers/game-domain.mapper";
 import {
@@ -20,6 +21,7 @@ import {
 export type PlaceBetInput = {
   userId: string;
   amountInCents: bigint;
+  autoCashoutMultiplierMicro?: bigint | null;
 };
 
 export type PlaceBetResult = {
@@ -37,6 +39,7 @@ export class PlaceBetUseCase {
     private readonly walletGateway: WalletGatewayPort,
     @Inject(GAME_EVENTS)
     private readonly events: GameEventsPort,
+    private readonly metrics: GameMetricsService,
   ) {}
 
   async execute(input: PlaceBetInput): Promise<PlaceBetResult> {
@@ -62,6 +65,7 @@ export class PlaceBetUseCase {
         userId: input.userId,
         amountInCents: input.amountInCents,
         debitCommandId,
+        autoCashoutMultiplierMicro: input.autoCashoutMultiplierMicro ?? null,
       });
     } catch (error) {
       if (
@@ -94,6 +98,7 @@ export class PlaceBetUseCase {
       }
 
       this.events.broadcastBetPlaced(activeBet);
+      this.metrics.recordBetPlaced(input.amountInCents);
 
       return { bet: activeBet, roundId: roundRecord.id };
     } catch (error) {

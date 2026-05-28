@@ -34,6 +34,7 @@ describe("ws-payload.mapper", () => {
           status: "ACTIVE" as const,
           cashoutMultiplierMicro: null,
           payoutInCents: null,
+          autoCashoutMultiplierMicro: 2_000_000n,
           debitCommandId: "cmd-1",
           createdAt: new Date(),
           updatedAt: new Date(),
@@ -44,6 +45,7 @@ describe("ws-payload.mapper", () => {
     expect(payload.currentMultiplier).toBe("1.50");
     expect(payload.crashMultiplier).toBe("2.50");
     expect(payload.bets[0]?.amount).toBe("10.00");
+    expect(payload.bets[0]?.autoCashoutMultiplier).toBe("2.00");
   });
 
   it("maps running tick payload", () => {

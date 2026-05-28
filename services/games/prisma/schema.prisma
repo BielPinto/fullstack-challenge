@@ -52,6 +52,7 @@ model Bet {
 
   cashoutMultiplierMicro  BigInt?    @map("cashout_multiplier_micro")
   payoutInCents           BigInt?    @map("payout_in_cents")
+  autoCashoutMultiplierMicro BigInt? @map("auto_cashout_multiplier_micro")
 
   debitCommandId          String     @unique @map("debit_command_id")
 

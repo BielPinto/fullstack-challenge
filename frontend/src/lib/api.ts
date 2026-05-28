@@ -114,17 +114,33 @@ export type BetActionResponseDto = {
   payout?: string;
 };
 
+export type LeaderboardPeriod = "24h" | "7d";
+
+export type LeaderboardEntryDto = {
+  rank: number;
+  userId: string;
+  profit: string;
+  betCount: number;
+};
+
 export const gamesApi = {
   currentRound: (token?: string | null) =>
     apiFetch<RoundViewDto>("/games/rounds/current", { accessToken: token }),
   history: (skip = 0, take = 20) =>
     apiFetch<{ items: RoundHistoryItemDto[] }>(`/games/rounds/history?skip=${skip}&take=${take}`),
-  placeBet: (amountInCents: string, token: string) =>
+  placeBet: (amountInCents: string, token: string, autoCashoutMultiplier?: string) =>
     apiFetch<BetActionResponseDto>("/games/bet", {
       method: "POST",
       accessToken: token,
-      body: JSON.stringify({ amountInCents }),
+      body: JSON.stringify({
+        amountInCents,
+        ...(autoCashoutMultiplier ? { autoCashoutMultiplier } : {}),
+      }),
     }),
+  leaderboard: (period: LeaderboardPeriod = "24h", limit = 10) =>
+    apiFetch<{ period: LeaderboardPeriod; items: LeaderboardEntryDto[] }>(
+      `/games/leaderboard?period=${period}&limit=${limit}`,
+    ),
   cashout: (token: string) =>
     apiFetch<BetActionResponseDto>("/games/bet/cashout", {
       method: "POST",

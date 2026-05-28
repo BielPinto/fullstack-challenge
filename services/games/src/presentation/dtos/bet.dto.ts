@@ -8,6 +8,13 @@ export class PlaceBetRequestDto {
     description: "Bet stake in centavos (BRL). Min 100, max 100000.",
   })
   amountInCents!: string;
+
+  @ApiPropertyOptional({
+    example: "2.00",
+    description:
+      "Optional auto cashout target multiplier (e.g. 2.00 = 2.00x). Min 1.01x, max 1000x.",
+  })
+  autoCashoutMultiplier?: string;
 }
 
 export class BetActionResponseDto {

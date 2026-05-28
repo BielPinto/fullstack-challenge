@@ -17,6 +17,8 @@ export type WsBetPayloadV1 = {
   status: string;
   cashoutMultiplier: string | null;
   payout: string | null;
+  /** Target multiplier for server-side auto cashout (optional). */
+  autoCashoutMultiplier?: string | null;
 };
 
 export type WsRoundStatePayloadV1 = {

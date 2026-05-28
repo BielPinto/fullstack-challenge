@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable, Logger, forwardRef } from "@nestjs/common";
 import { RoundPhase } from "@prisma/client";
 import { randomBytes } from "node:crypto";
 import {
@@ -19,6 +19,8 @@ import {
   newServerSecret,
 } from "../../domain/services/provably-fair";
 import { roundToDomain } from "../mappers/game-domain.mapper";
+import { GameMetricsService } from "../../infrastructure/observability/game-metrics.service";
+import { CashOutBetUseCase } from "../use-cases/cash-out-bet.use-case";
 
 const DEFAULT_BETTING_WINDOW_MS = 10_000;
 const SETTLED_PAUSE_MS = 2_000;
@@ -38,6 +40,9 @@ export class GameRoundService {
     private readonly bets: BetRepositoryPort,
     @Inject(GAME_EVENTS)
     private readonly events: GameEventsPort,
+    @Inject(forwardRef(() => CashOutBetUseCase))
+    private readonly cashOutBet: CashOutBetUseCase,
+    private readonly metrics: GameMetricsService,
   ) {
     this.tickIntervalMs = Number(
       process.env.RUNNING_TICK_INTERVAL_MS ?? DEFAULT_TICK_INTERVAL_MS,
@@ -175,6 +180,7 @@ export class GameRoundService {
           elapsedMs,
           runDurationMs: round.runDurationMs,
         });
+        await this.cashOutBet.processAutoCashoutsForRound(round.id, multiplierMicro);
         this.scheduleNextTick(round);
         return;
       }
@@ -245,6 +251,8 @@ export class GameRoundService {
 
   private async settleRound(roundRecord: RoundRecord): Promise<RoundRecord> {
     const lostCount = await this.bets.markAllActiveBetsLost(roundRecord.id);
+    this.metrics.recordBetsLost(lostCount);
+    this.metrics.recordRoundSettled();
     const settledAt = new Date();
     const round = roundToDomain(roundRecord);
     round.settle(settledAt);

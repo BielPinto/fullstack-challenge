@@ -47,8 +47,13 @@ docker compose ps            # aguarde todos healthy
 | **Keycloak** | http://localhost:8080 | Admin `admin` / `admin` |
 | **RabbitMQ UI** | http://localhost:15672 | `admin` / `admin` |
 | **PostgreSQL** | `localhost:5432` | DBs `games` e `wallets`, user `admin` |
+| **Prometheus** | http://localhost:9090 | Scrape do `games` — ver [OBSERVABILITY.md](OBSERVABILITY.md) |
+| **Grafana** | http://localhost:3001 | `admin` / `admin`, dashboard Crash Game |
+| **Métricas games** | http://localhost:4001/metrics | Formato Prometheus |
 
 **REST:** `http://localhost:8000/games/...` e `http://localhost:8000/wallets/...`
+
+**Bônus na UI:** auto cashout (multiplicador alvo na aposta), leaderboard (`GET /games/leaderboard?period=24h|7d`).
 
 **WebSocket:** o frontend usa `VITE_GAME_WS_URL=http://localhost:4001` (conexão direta ao Game Service). Em dev local, proxy WebSocket no Kong exige config extra de upgrade; REST já está estável no gateway.
 
