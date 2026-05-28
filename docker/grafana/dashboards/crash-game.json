@@ -1,0 +1,62 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" } },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "id": 1,
+      "title": "Bets placed / cashed out / lost",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(crash_game_bets_placed_total[5m])",
+          "legendFormat": "placed"
+        },
+        {
+          "expr": "rate(crash_game_bets_cashed_out_total[5m])",
+          "legendFormat": "cashed out"
+        },
+        {
+          "expr": "rate(crash_game_bets_lost_total[5m])",
+          "legendFormat": "lost"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "max": 2, "min": 0 } },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "id": 2,
+      "title": "RTP (payout / stake volume)",
+      "type": "gauge",
+      "targets": [{ "expr": "crash_game_rtp_ratio" }]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
+      "id": 3,
+      "title": "WebSocket broadcast latency (p95)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(crash_game_ws_broadcast_duration_seconds_bucket[5m])) by (le, event))",
+          "legendFormat": "{{event}}"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["crash-game"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "title": "Crash Game",
+  "uid": "crash-game",
+  "version": 1
+}

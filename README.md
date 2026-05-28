@@ -240,13 +240,15 @@ O realm `crash-game` é importado automaticamente no `docker:up`. Nenhuma config
 | Game Service   | `4001`       | `http://localhost:8000/games/*`   |
 | Wallet Service | `4002`       | `http://localhost:8000/wallets/*` |
 
+O Kong em `docker/kong/kong.yml` inclui o plugin **global `cors`** para as origens da UI (`localhost:3000` e `5173`), com `credentials: true`, para que o browser aceite `Authorization` no preflight `OPTIONS`. Depois de alterar o YAML, recarregue o Kong: `docker compose restart kong`.
+
 Cada serviço tem:
 
 - Estrutura de camadas DDD: `domain/`, `application/`, `infrastructure/`, `presentation/`
 - `tests/unit/` e `tests/e2e/` prontos para receber os testes
 - `packages/` na raiz do monorepo para pacotes compartilhados entre serviços (ex: `@crash/eslint`)
 
-**Frontend — a implementar.** A pasta `frontend/` existe mas o scaffold é responsabilidade do candidato. Use o framework de sua preferência:
+**Frontend — scaffold Vite na pasta `frontend/`** (TanStack Query, Tailwind v4, shadcn-style, OIDC Keycloak). Serviço Docker na porta `3000`; desenvolvimento local: `cd frontend && bun dev` (`5173`).
 
 - **Vite + React** — opção mais leve, ideal se quiser controle total
 - **Next.js** — SSR out-of-the-box, boa escolha para SEO e rotas
